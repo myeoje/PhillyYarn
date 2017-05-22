@@ -56,6 +56,7 @@ import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
@@ -79,6 +80,7 @@ import org.apache.hadoop.yarn.sls.utils.SLSUtils;
 public abstract class AMSimulator extends TaskRunner.Task {
   // resource manager
   protected ResourceManager rm;
+  protected YarnClient yarnClient;
   // main
   protected SLSRunner se;
   // application
@@ -95,6 +97,8 @@ public abstract class AMSimulator extends TaskRunner.Task {
   protected String user;  
   // queue name
   protected String queue;
+  // jobGpu number:  for philly
+  protected int jobGpu;
   // am type
   protected String amtype;
   // job start/end time
@@ -102,6 +106,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
   protected long traceFinishTimeMS;
   protected long simulateStartTimeMS;
   protected long simulateFinishTimeMS;
+  private long currentTimeMS;
   // whether tracked in Metrics
   protected boolean isTracked;
   // progress
@@ -114,14 +119,15 @@ public abstract class AMSimulator extends TaskRunner.Task {
     this.responseQueue = new LinkedBlockingQueue<AllocateResponse>();
   }
 
-  public void init(int id, int heartbeatInterval, 
-      List<ContainerSimulator> containerList, ResourceManager rm, SLSRunner se,
-      long traceStartTime, long traceFinishTime, String user, String queue, 
-      boolean isTracked, String oldAppId) {
+  public void init(int id, int heartbeatInterval,
+                   List<ContainerSimulator> containerList, ResourceManager rm, YarnClient yarnClient, SLSRunner se,
+                   long traceStartTime, long traceFinishTime, String user, String queue, int jobGpu,
+                   boolean isTracked, String oldAppId) {
     super.init(traceStartTime, traceStartTime + 1000000L * heartbeatInterval,
             heartbeatInterval);
     this.user = user;
     this.rm = rm;
+    this.yarnClient = yarnClient;
     this.se = se;
     this.user = user;
     this.queue = queue;
@@ -129,6 +135,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
     this.isTracked = isTracked;
     this.traceStartTimeMS = traceStartTime;
     this.traceFinishTimeMS = traceFinishTime;
+    this.jobGpu = jobGpu;
   }
 
   /**
@@ -151,14 +158,18 @@ public abstract class AMSimulator extends TaskRunner.Task {
 
   @Override
   public void middleStep() throws Exception {
+    currentTimeMS = System.currentTimeMillis();
     // process responses in the queue
-    processResponseQueue();
+    processResponseQueue(currentTimeMS);
     
     // send out request
-    sendContainerRequest();
+    sendContainerRequest(currentTimeMS);
     
     // check whether finish
-    checkStop();
+    checkStop(currentTimeMS);
+
+    // check whether resource requiring timeout and yielding timeout
+    checkTimeOut(currentTimeMS);
   }
 
   @Override
@@ -197,7 +208,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
   }
   
   protected ResourceRequest createResourceRequest(
-          Resource resource, String host, int priority, int numContainers) {
+          Resource resource, String host, int priority, int numContainers, boolean relaxLocality) {
     ResourceRequest request = recordFactory
         .newRecordInstance(ResourceRequest.class);
     request.setCapability(resource);
@@ -206,6 +217,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
     Priority prio = recordFactory.newRecordInstance(Priority.class);
     prio.setPriority(priority);
     request.setPriority(prio);
+    request.setRelaxLocality(relaxLocality);
     return request;
   }
   
@@ -223,11 +235,17 @@ public abstract class AMSimulator extends TaskRunner.Task {
     return createAllocateRequest(ask, new ArrayList<ContainerId>());
   }
 
-  protected abstract void processResponseQueue() throws Exception;
+  protected AllocateRequest createReleaseRequest(List<ContainerId> toRelease) {
+    return createAllocateRequest(new ArrayList<ResourceRequest>(), toRelease);
+  }
+
+  protected abstract void checkTimeOut(long currentTimeMS) throws Exception;
+
+  protected abstract void processResponseQueue(long currentTimeMS) throws Exception;
   
-  protected abstract void sendContainerRequest() throws Exception;
+  protected abstract void sendContainerRequest(long currentTimeMS) throws Exception;
   
-  protected abstract void checkStop();
+  protected abstract void checkStop(long currentTimeMS);
   
   private void submitApp()
           throws YarnException, InterruptedException, IOException {
@@ -325,9 +343,13 @@ public abstract class AMSimulator extends TaskRunner.Task {
               .removeTrackedApp(appAttemptId, oldAppId);
     }
   }
-  
+
   protected List<ResourceRequest> packageRequests(
-          List<ContainerSimulator> csList, int priority) {
+          List<ContainerSimulator> csList, int priority, boolean relaxLocality) {
+    // Wencong: assume all callers share the same relaxLocality
+    // it's "false" for Philly jobs
+    // it's "true" for MR jobs
+
     // create requests
     Map<String, ResourceRequest> rackLocalRequestMap = new HashMap<String, ResourceRequest>();
     Map<String, ResourceRequest> nodeLocalRequestMap = new HashMap<String, ResourceRequest>();
@@ -341,7 +363,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
             rackLocalRequestMap.get(rackname).getNumContainers() + 1);
       } else {
         ResourceRequest request = createResourceRequest(
-                cs.getResource(), rackname, priority, 1);
+                cs.getResource(), rackname, priority, 1, relaxLocality);
         rackLocalRequestMap.put(rackname, request);
       }
       // check node local
@@ -351,13 +373,13 @@ public abstract class AMSimulator extends TaskRunner.Task {
             nodeLocalRequestMap.get(hostname).getNumContainers() + 1);
       } else {
         ResourceRequest request = createResourceRequest(
-                cs.getResource(), hostname, priority, 1);
+                cs.getResource(), hostname, priority, 1, relaxLocality);
         nodeLocalRequestMap.put(hostname, request);
       }
       // any
       if (anyRequest == null) {
         anyRequest = createResourceRequest(
-                cs.getResource(), ResourceRequest.ANY, priority, 1);
+                cs.getResource(), ResourceRequest.ANY, priority, 1, relaxLocality);
       } else {
         anyRequest.setNumContainers(anyRequest.getNumContainers() + 1);
       }
@@ -368,6 +390,107 @@ public abstract class AMSimulator extends TaskRunner.Task {
     if (anyRequest != null) {
       ask.add(anyRequest);
     }
+    LOG.debug(MessageFormat.format("Application {0} is sending resource request: {1}",appId,  ask));
+    return ask;
+  }
+
+
+  protected List<ResourceRequest> packageRequests(
+          List<ContainerSimulator> csList, int priority, String rack, String nodeList, boolean relaxLocality) {
+    // Wencong: assume all callers share the same relaxLocality
+    // it's "false" for Philly jobs
+    // it's "true" for MR jobs
+
+    // this function is only for Philly jobs
+    // assume all container share the same node-level locality requirement and don't relax locality
+
+    // create requests
+    Map<String, ResourceRequest> rackLocalRequestMap = new HashMap<String, ResourceRequest>();
+    Map<String, ResourceRequest> nodeLocalRequestMap = new HashMap<String, ResourceRequest>();
+    ResourceRequest anyRequest = null;
+    for (ContainerSimulator cs : csList) {
+      //String rackHostNames[] = SLSUtils.getRackHostName(cs.getHostname());
+      // check rack local
+      String rackname = rack;
+      if (rackLocalRequestMap.containsKey(rackname)) {
+        rackLocalRequestMap.get(rackname).setNumContainers(
+                rackLocalRequestMap.get(rackname).getNumContainers() + 1);
+      } else {
+        ResourceRequest request = createResourceRequest(
+                cs.getResource(), rackname, priority, 1, relaxLocality);
+        rackLocalRequestMap.put(rackname, request);
+      }
+      // check node local
+      String hostname = nodeList;
+      if (nodeLocalRequestMap.containsKey(hostname)) {
+        nodeLocalRequestMap.get(hostname).setNumContainers(
+                nodeLocalRequestMap.get(hostname).getNumContainers() + 1);
+      } else {
+        ResourceRequest request = createResourceRequest(
+                cs.getResource(), hostname, priority, 1, relaxLocality);
+        nodeLocalRequestMap.put(hostname, request);
+      }
+      // any
+      if (anyRequest == null) {
+        anyRequest = createResourceRequest(
+                cs.getResource(), ResourceRequest.ANY, priority, 1, relaxLocality);
+      } else {
+        anyRequest.setNumContainers(anyRequest.getNumContainers() + 1);
+      }
+    }
+    List<ResourceRequest> ask = new ArrayList<ResourceRequest>();
+    ask.addAll(nodeLocalRequestMap.values());
+    ask.addAll(rackLocalRequestMap.values());
+    if (anyRequest != null) {
+      ask.add(anyRequest);
+    }
+    LOG.debug(MessageFormat.format("Application {0} is sending resource request: {1}",appId,  ask));
+    return ask;
+
+  }
+
+  protected List<ResourceRequest> cancelRequests(
+          List<ContainerSimulator> csList, int priority, String rack, String nodeList, boolean relaxLocality) {
+    // create requests
+    Map<String, ResourceRequest> rackLocalRequestMap = new HashMap<String, ResourceRequest>();
+    Map<String, ResourceRequest> nodeLocalRequestMap = new HashMap<String, ResourceRequest>();
+    ResourceRequest anyRequest = null;
+    for (ContainerSimulator cs : csList) {
+      //String rackHostNames[] = SLSUtils.getRackHostName(cs.getHostname());
+      // check rack local
+      String rackname = rack;
+      if (rackLocalRequestMap.containsKey(rackname)) {
+        rackLocalRequestMap.get(rackname).setNumContainers(0);
+      } else {
+        ResourceRequest request = createResourceRequest(
+                cs.getResource(), rackname, priority, 0, relaxLocality);
+        rackLocalRequestMap.put(rackname, request);
+      }
+      // check node local
+      String hostname = nodeList;
+      if (nodeLocalRequestMap.containsKey(hostname)) {
+        nodeLocalRequestMap.get(hostname).setNumContainers(
+                nodeLocalRequestMap.get(hostname).getNumContainers() - 1);
+      } else {
+        ResourceRequest request = createResourceRequest(
+                cs.getResource(), hostname, priority, -1, relaxLocality);
+        nodeLocalRequestMap.put(hostname, request);
+      }
+      // any
+      if (anyRequest == null) {
+        anyRequest = createResourceRequest(
+                cs.getResource(), ResourceRequest.ANY, priority, 0, relaxLocality);
+      } else {
+        anyRequest.setNumContainers(0);
+      }
+    }
+    List<ResourceRequest> ask = new ArrayList<ResourceRequest>();
+    ask.addAll(nodeLocalRequestMap.values());
+    ask.addAll(rackLocalRequestMap.values());
+    if (anyRequest != null) {
+      ask.add(anyRequest);
+    }
+    LOG.debug(MessageFormat.format("Application {0} is sending resource request: {1}",appId,  ask));
     return ask;
   }
 

@@ -1,0 +1,10 @@
+{
+  "am.type" : "philly",
+  "job.start.ms" : 4000,
+  "job.end.ms" : 17375,
+  "job.queue.name" : "sls_queue_1",
+  "job.id" : "job_1369942127770_1205",
+  "job.user" : "jenkins",
+  "job.gpu" : "4"
+}
+

@@ -231,9 +231,20 @@ public class NMSimulator extends TaskRunner.Task {
             "container ({1}).", node.getNodeID(), container.getId()));
     if (lifeTimeMS != -1) {
       // normal container
+      // wencong: the lifeTimeMS can be max_long, which means the container reserve the resource
+      long theEndTime, theLifeTime;
+      long cur_sys_time = System.currentTimeMillis();
+      if (lifeTimeMS == Long.MAX_VALUE){
+        theEndTime = Long.MAX_VALUE;
+      }
+      else {
+        theEndTime = lifeTimeMS + cur_sys_time;
+      }
+      theLifeTime = theEndTime - cur_sys_time;
+      assert (theLifeTime > 0);
       ContainerSimulator cs = new ContainerSimulator(container.getId(),
-              container.getResource(), lifeTimeMS + System.currentTimeMillis(),
-              lifeTimeMS);
+              container.getResource(), theEndTime,
+              theLifeTime);
       containerQueue.add(cs);
       runningContainers.put(cs.getId(), cs);
     } else {
@@ -243,6 +254,29 @@ public class NMSimulator extends TaskRunner.Task {
         amContainerList.add(container.getId());
       }
     }
+  }
+
+  public void deleteContainer(Container container) {
+    // wencong:
+    // we can only delete the container with max_long as lifeTimeMS,
+    // which means the container is just used for reservation and never completed.
+    ContainerSimulator cont = runningContainers.get(container.getId());
+    containerQueue.remove(cont);
+    runningContainers.remove(container.getId());
+  }
+
+  public void relaunchContainer(Container container, long lifeTimeMS) {
+    // this function is for normal container, not AM container
+    assert(lifeTimeMS != -1);
+
+    LOG.debug(MessageFormat.format("NodeManager {0} relaunches the " +
+            "container ({1}).", node.getNodeID(), container.getId()));
+    deleteContainer(container);
+    ContainerSimulator cs = new ContainerSimulator(container.getId(),
+            container.getResource(), lifeTimeMS + System.currentTimeMillis(),
+            lifeTimeMS);
+    containerQueue.add(cs);
+    runningContainers.put(cs.getId(), cs);
   }
 
   /**

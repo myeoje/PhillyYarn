@@ -60,6 +60,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
+import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.sls.utils.SLSUtils;
 import org.apache.log4j.Logger;
 import org.codehaus.jackson.JsonFactory;
@@ -70,6 +71,7 @@ import org.codehaus.jackson.map.ObjectMapper;
 public class SLSRunner {
   // RM, Runner
   private ResourceManager rm;
+  private YarnClient yarnClient;
   private static TaskRunner runner = new TaskRunner();
   private String[] inputTraces;
   private Configuration conf;
@@ -166,6 +168,11 @@ public class SLSRunner {
     rm = new ResourceManager();
     rm.init(rmConf);
     rm.start();
+
+    // Wencong: add YarnClient for getNodeReports
+    yarnClient = YarnClient.createYarnClient();
+    yarnClient.init(rmConf);
+    yarnClient.start();
   }
 
   private void startNM() throws YarnException, IOException {
@@ -286,35 +293,51 @@ public class SLSRunner {
                   queueAppNumMap.get(queue) : 0;
           queueSize ++;
           queueAppNumMap.put(queue, queueSize);
-          // tasks
-          List tasks = (List) jsonJob.get("job.tasks");
-          if (tasks == null || tasks.size() == 0) {
-            continue;
-          }
+          String amType = jsonJob.get("am.type").toString();
           List<ContainerSimulator> containerList =
                   new ArrayList<ContainerSimulator>();
-          for (Object o : tasks) {
-            Map jsonTask = (Map) o;
-            String hostname = jsonTask.get("container.host").toString();
-            long taskStart = Long.parseLong(
-                    jsonTask.get("container.start.ms").toString());
-            long taskFinish = Long.parseLong(
-                    jsonTask.get("container.end.ms").toString());
-            long lifeTime = taskFinish - taskStart;
-            int priority = Integer.parseInt(
-                    jsonTask.get("container.priority").toString());
-            String type = jsonTask.get("container.type").toString();
-            containerList.add(new ContainerSimulator(containerResource,
-                    lifeTime, hostname, priority, type));
-          }
+          int jobGpu = 0;
 
+          // Wencong: TODO: hack for debugging
+          if (amType.equals("philly"))
+          {
+            // wencong: hack for philly job input
+            jobGpu = Integer.parseInt(
+                    jsonJob.get("job.gpu").toString());
+            // assign gpu number container
+//            for (int idx =0;idx<jobGpu;idx++){
+//              containerList.add(new ContainerSimulator(containerResource,
+//                      5000, "/b5/10.198.141.15", 20, "gpu"));
+//            }
+          }
+          else {
+            // tasks
+            List tasks = (List) jsonJob.get("job.tasks");
+            if (tasks == null || tasks.size() == 0) {
+              continue;
+            }
+            for (Object o : tasks) {
+              Map jsonTask = (Map) o;
+              String hostname = jsonTask.get("container.host").toString();
+              long taskStart = Long.parseLong(
+                      jsonTask.get("container.start.ms").toString());
+              long taskFinish = Long.parseLong(
+                      jsonTask.get("container.end.ms").toString());
+              long lifeTime = taskFinish - taskStart;
+              int priority = Integer.parseInt(
+                      jsonTask.get("container.priority").toString());
+              String type = jsonTask.get("container.type").toString();
+              containerList.add(new ContainerSimulator(containerResource,
+                      lifeTime, hostname, priority, type));
+            }
+          }
           // create a new AM
-          String amType = jsonJob.get("am.type").toString();
+
           AMSimulator amSim = (AMSimulator) ReflectionUtils.newInstance(
                   amClassMap.get(amType), new Configuration());
           if (amSim != null) {
-            amSim.init(AM_ID++, heartbeatInterval, containerList, rm,
-                    this, jobStartTime, jobFinishTime, user, queue,
+            amSim.init(AM_ID++, heartbeatInterval, containerList, rm, yarnClient,
+                    this, jobStartTime, jobFinishTime, user, queue, jobGpu,
                     isTracked, oldAppId);
             runner.schedule(amSim);
             maxRuntime = Math.max(maxRuntime, jobFinishTime);
@@ -399,7 +422,7 @@ public class SLSRunner {
                   amClassMap.get(jobType), conf);
           if (amSim != null) {
             amSim.init(AM_ID ++, heartbeatInterval, containerList,
-                    rm, this, jobStartTimeMS, jobFinishTimeMS, user, jobQueue,
+                    rm, yarnClient, this, jobStartTimeMS, jobFinishTimeMS, user, jobQueue, 0,
                     isTracked, oldJobId);
             runner.schedule(amSim);
             maxRuntime = Math.max(maxRuntime, jobFinishTimeMS);

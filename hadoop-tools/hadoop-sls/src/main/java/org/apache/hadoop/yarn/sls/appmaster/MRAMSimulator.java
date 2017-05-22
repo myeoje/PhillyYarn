@@ -38,6 +38,7 @@ import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
@@ -45,6 +46,7 @@ import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 
 import org.apache.hadoop.yarn.sls.scheduler.ContainerSimulator;
 import org.apache.hadoop.yarn.sls.SLSRunner;
+import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
 @Private
@@ -119,11 +121,11 @@ public class MRAMSimulator extends AMSimulator {
   public final Logger LOG = Logger.getLogger(MRAMSimulator.class);
 
   public void init(int id, int heartbeatInterval,
-      List<ContainerSimulator> containerList, ResourceManager rm, SLSRunner se,
-      long traceStartTime, long traceFinishTime, String user, String queue, 
-      boolean isTracked, String oldAppId) {
-    super.init(id, heartbeatInterval, containerList, rm, se, 
-              traceStartTime, traceFinishTime, user, queue,
+                   List<ContainerSimulator> containerList, ResourceManager rm, YarnClient yarnClient, SLSRunner se,
+                   long traceStartTime, long traceFinishTime, String user, String queue, int jobGpu,
+                   boolean isTracked, String oldAppId) {
+    super.init(id, heartbeatInterval, containerList, rm, yarnClient, se,
+              traceStartTime, traceFinishTime, user, queue, jobGpu,
               isTracked, oldAppId);
     amtype = "mapreduce";
     
@@ -142,6 +144,9 @@ public class MRAMSimulator extends AMSimulator {
     mapTotal = pendingMaps.size();
     reduceTotal = pendingReduces.size();
     totalContainers = mapTotal + reduceTotal;
+
+    // for debug
+    Logger.getRootLogger().setLevel(Level.ALL);
   }
 
   @Override
@@ -160,12 +165,12 @@ public class MRAMSimulator extends AMSimulator {
     ResourceRequest amRequest = createResourceRequest(
             BuilderUtils.newResource(MR_AM_CONTAINER_RESOURCE_MEMORY_MB,
                     MR_AM_CONTAINER_RESOURCE_VCORES),
-            ResourceRequest.ANY, 1, 1);
+            ResourceRequest.ANY, 1, 1, true);
     ask.add(amRequest);
     LOG.debug(MessageFormat.format("Application {0} sends out allocate " +
             "request for its AM", appId));
     final AllocateRequest request = this.createAllocateRequest(ask);
-
+    LOG.debug(MessageFormat.format("Application {0} am request: {1}", appId, request));
     UserGroupInformation ugi =
             UserGroupInformation.createRemoteUser(appAttemptId.toString());
     Token<AMRMTokenIdentifier> token = rm.getRMContext().getRMApps()
@@ -183,10 +188,14 @@ public class MRAMSimulator extends AMSimulator {
       responseQueue.put(response);
     }
   }
+  @Override
+  protected void checkTimeOut(long currentTimeMS)
+          throws InterruptedException, YarnException, IOException {
+  }
 
   @Override
   @SuppressWarnings("unchecked")
-  protected void processResponseQueue()
+  protected void processResponseQueue(long currentTimeMS)
           throws InterruptedException, YarnException, IOException {
     // Check whether receive the am container
     if (!isAMContainerRunning) {
@@ -311,7 +320,7 @@ public class MRAMSimulator extends AMSimulator {
   }
 
   @Override
-  protected void sendContainerRequest()
+  protected void sendContainerRequest(long currentTimeMS)
           throws YarnException, IOException, InterruptedException {
     if (isFinished) {
       return;
@@ -323,13 +332,13 @@ public class MRAMSimulator extends AMSimulator {
       if (mapFinished != mapTotal) {
         // map phase
         if (! pendingMaps.isEmpty()) {
-          ask = packageRequests(pendingMaps, PRIORITY_MAP);
+          ask = packageRequests(pendingMaps, PRIORITY_MAP, true);
           LOG.debug(MessageFormat.format("Application {0} sends out " +
                   "request for {1} mappers.", appId, pendingMaps.size()));
           scheduledMaps.addAll(pendingMaps);
           pendingMaps.clear();
         } else if (! pendingFailedMaps.isEmpty() && scheduledMaps.isEmpty()) {
-          ask = packageRequests(pendingFailedMaps, PRIORITY_MAP);
+          ask = packageRequests(pendingFailedMaps, PRIORITY_MAP, true);
           LOG.debug(MessageFormat.format("Application {0} sends out " +
                   "requests for {1} failed mappers.", appId,
                   pendingFailedMaps.size()));
@@ -339,14 +348,14 @@ public class MRAMSimulator extends AMSimulator {
       } else if (reduceFinished != reduceTotal) {
         // reduce phase
         if (! pendingReduces.isEmpty()) {
-          ask = packageRequests(pendingReduces, PRIORITY_REDUCE);
+          ask = packageRequests(pendingReduces, PRIORITY_REDUCE, true);
           LOG.debug(MessageFormat.format("Application {0} sends out " +
                   "requests for {1} reducers.", appId, pendingReduces.size()));
           scheduledReduces.addAll(pendingReduces);
           pendingReduces.clear();
         } else if (! pendingFailedReduces.isEmpty()
                 && scheduledReduces.isEmpty()) {
-          ask = packageRequests(pendingFailedReduces, PRIORITY_REDUCE);
+          ask = packageRequests(pendingFailedReduces, PRIORITY_REDUCE, true);
           LOG.debug(MessageFormat.format("Application {0} sends out " +
                   "request for {1} failed reducers.", appId,
                   pendingFailedReduces.size()));
@@ -365,7 +374,7 @@ public class MRAMSimulator extends AMSimulator {
     } else {
       request.setProgress((float) finishedContainers / totalContainers);
     }
-
+    LOG.debug(MessageFormat.format("resource request: {0}", request));
     UserGroupInformation ugi =
             UserGroupInformation.createRemoteUser(appAttemptId.toString());
     Token<AMRMTokenIdentifier> token = rm.getRMContext().getRMApps()
@@ -385,7 +394,7 @@ public class MRAMSimulator extends AMSimulator {
   }
 
   @Override
-  protected void checkStop() {
+  protected void checkStop(long currentTimeMS) {
     if (isFinished) {
       super.setEndTime(System.currentTimeMillis());
     }
