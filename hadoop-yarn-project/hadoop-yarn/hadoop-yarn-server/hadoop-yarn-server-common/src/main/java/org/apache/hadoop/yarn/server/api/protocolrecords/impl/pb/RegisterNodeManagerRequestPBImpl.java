@@ -53,6 +53,7 @@ public class RegisterNodeManagerRequestPBImpl extends RegisterNodeManagerRequest
   boolean viaProto = false;
   
   private Resource resource = null;
+  private String gpuTopology = null;
   private NodeId nodeId = null;
   private List<NMContainerStatus> containerStatuses = null;
   private List<ApplicationId> runningApplications = null;
@@ -136,6 +137,21 @@ public class RegisterNodeManagerRequestPBImpl extends RegisterNodeManagerRequest
     if (resource == null) 
       builder.clearResource();
     this.resource = resource;
+  }
+
+  @Override
+  public String getGPUTopology() {
+    RegisterNodeManagerRequestProtoOrBuilder p = viaProto ? proto : builder;
+    if (!p.hasGpuTopology()) {
+      return "";
+    }
+    return (p.getGpuTopology());
+  }
+
+  @Override
+  public void setGPUTopology(String topology) {
+    maybeInitBuilder();
+    builder.setGpuTopology(topology);
   }
 
   @Override

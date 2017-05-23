@@ -60,6 +60,18 @@ public class ResourceOptionPBImpl extends ResourceOption {
   }
 
   @Override
+  public String getGPUTopology() {
+    ResourceOptionProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getGpuTopology();
+  }
+
+  @Override
+  protected void setGPUTopology(String topology) {
+    maybeInitBuilder();
+    builder.setGpuTopology(topology);
+  }
+
+  @Override
   public int getOverCommitTimeout() {
     ResourceOptionProtoOrBuilder p = viaProto ? proto : builder;
     return p.getOverCommitTimeout();

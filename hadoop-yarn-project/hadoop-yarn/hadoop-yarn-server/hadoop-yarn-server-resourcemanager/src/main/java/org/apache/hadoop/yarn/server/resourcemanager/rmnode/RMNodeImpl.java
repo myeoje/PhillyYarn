@@ -99,6 +99,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   private final String nodeAddress; // The containerManager address
   private String httpAddress;
   private volatile Resource totalCapability;
+  private String gpuTopology;
   private final Node node;
 
   private String healthReport;
@@ -220,6 +221,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   private final StateMachine<NodeState, RMNodeEventType,
                              RMNodeEvent> stateMachine;
 
+  // TODO: MJTHIS: this should be deleted, now just to pass compilation.
   public RMNodeImpl(NodeId nodeId, RMContext context, String hostName,
       int cmPort, int httpPort, Node node, Resource capability, String nodeManagerVersion) {
     this.nodeId = nodeId;
@@ -227,7 +229,34 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     this.hostName = hostName;
     this.commandPort = cmPort;
     this.httpPort = httpPort;
-    this.totalCapability = capability; 
+    this.totalCapability = capability;
+    this.nodeAddress = hostName + ":" + cmPort;
+    this.httpAddress = hostName + ":" + httpPort;
+    this.node = node;
+    this.healthReport = "Healthy";
+    this.lastHealthReportTime = System.currentTimeMillis();
+    this.nodeManagerVersion = nodeManagerVersion;
+
+    this.latestNodeHeartBeatResponse.setResponseId(0);
+
+    ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    this.readLock = lock.readLock();
+    this.writeLock = lock.writeLock();
+
+    this.stateMachine = stateMachineFactory.make(this);
+
+    this.nodeUpdateQueue = new ConcurrentLinkedQueue<UpdatedContainerInfo>();
+  }
+
+  public RMNodeImpl(NodeId nodeId, RMContext context, String hostName,
+      int cmPort, int httpPort, Node node, Resource capability, String topology, String nodeManagerVersion) {
+    this.nodeId = nodeId;
+    this.context = context;
+    this.hostName = hostName;
+    this.commandPort = cmPort;
+    this.httpPort = httpPort;
+    this.totalCapability = capability;
+    this.gpuTopology = topology;
     this.nodeAddress = hostName + ":" + cmPort;
     this.httpAddress = hostName + ":" + httpPort;
     this.node = node;
@@ -284,6 +313,11 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   @Override
   public Resource getTotalCapability() {
     return this.totalCapability;
+  }
+
+  @Override
+  public String getGPUTopology() {
+    return this.gpuTopology;
   }
 
   @Override
@@ -519,6 +553,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       ResourceOption resourceOption = event.getResourceOption();
       // Set resource on RMNode
       rmNode.totalCapability = resourceOption.getResource();
+      rmNode.gpuTopology = resourceOption.getGPUTopology();
   }
 
   public static class AddNodeTransition implements
@@ -586,10 +621,9 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
           if (!rmNode.getTotalCapability().equals(
               newNode.getTotalCapability())) {
             rmNode.totalCapability = newNode.getTotalCapability();
+            rmNode.gpuTopology = newNode.getGPUTopology();
           }
           if (rmNode.getState().equals(NodeState.RUNNING)) {
-            // MJTHIS: Must uncomment it when you are running test cases
-            assert (rmNode.getTotalCapability().getGPUAttribute() != 0) : "GPU attribute is not set for node added event";
             // Only add old node if old state is RUNNING
             rmNode.context.getDispatcher().getEventHandler().handle(
                 new NodeAddedSchedulerEvent(rmNode));
@@ -629,8 +663,6 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
         if (isCapabilityChanged
             && rmNode.getState().equals(NodeState.RUNNING)) {
           // Update scheduler node's capacity for reconnect node.
-          // MJTHIS: Must uncomment it when you are running test cases
-          assert (rmNode.getTotalCapability().getGPUAttribute() != 0) : "GPU attribute is not set for node update event";
           rmNode.context
               .getDispatcher()
               .getEventHandler()
@@ -669,8 +701,6 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     public void transition(RMNodeImpl rmNode, RMNodeEvent event) {
       RMNodeResourceUpdateEvent updateEvent = (RMNodeResourceUpdateEvent)event;
       updateNodeResourceFromEvent(rmNode, updateEvent);
-      // MJTHIS: Must uncomment it when you are running test cases
-      assert (rmNode.getTotalCapability().getGPUAttribute() != 0) : "GPU attribute is not set for node update event";
       // Notify new resourceOption to scheduler
       rmNode.context.getDispatcher().getEventHandler().handle(
           new NodeResourceUpdateSchedulerEvent(rmNode, updateEvent.getResourceOption()));
@@ -820,8 +850,6 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       rmNode.setLastHealthReportTime(
           remoteNodeHealthStatus.getLastHealthReportTime());
       if (remoteNodeHealthStatus.getIsNodeHealthy()) {
-        // MJTHIS: Must uncomment it when you are running test cases
-        assert (rmNode.getTotalCapability().getGPUAttribute() != 0) : "GPU attribute is not set for node added event";
         rmNode.context.getDispatcher().getEventHandler().handle(
             new NodeAddedSchedulerEvent(rmNode));
         rmNode.context.getDispatcher().getEventHandler().handle(
