@@ -53,6 +53,7 @@ public class RegisterNodeManagerRequestPBImpl extends RegisterNodeManagerRequest
   boolean viaProto = false;
   
   private Resource resource = null;
+  private String gpuTopology = null;
   private NodeId nodeId = null;
   private List<NMContainerStatus> containerStatuses = null;
   private List<ApplicationId> runningApplications = null;
