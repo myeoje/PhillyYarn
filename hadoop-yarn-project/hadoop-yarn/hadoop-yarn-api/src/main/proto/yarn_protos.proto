@@ -63,6 +63,7 @@ message ResourceProto {
 message ResourceOptionProto {
   optional ResourceProto resource = 1;
   optional int32 over_commit_timeout = 2;
+  optional string gpu_topology = 3;
 }
 
 message NodeResourceMapProto {

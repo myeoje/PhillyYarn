@@ -23,6 +23,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentMap;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -100,6 +101,7 @@ public class ResourceTrackerService extends AbstractService implements
   private int minAllocMb;
   private int minAllocVcores;
   private int minAllocGPUs;
+  private int numGPUDomains;
 
   static {
     resync.setNodeAction(NodeAction.RESYNC);
@@ -148,6 +150,10 @@ public class ResourceTrackerService extends AbstractService implements
     minAllocGPUs = conf.getInt(
         YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_GPUS,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_GPUS);
+
+    numGPUDomains = conf.getInt(
+            YarnConfiguration.NM_GPU_TOPOLOGY_DOMAINS,
+            YarnConfiguration.DEFAULT_NM_GPU_TOPOLOGY_DOMAINS);
 
     minimumNodeManagerVersion = conf.get(
         YarnConfiguration.RM_NODEMANAGER_MINIMUM_VERSION,
@@ -252,6 +258,7 @@ public class ResourceTrackerService extends AbstractService implements
     int cmPort = nodeId.getPort();
     int httpPort = request.getHttpPort();
     Resource capability = request.getResource();
+    String gpuTopology = request.getGPUTopology();
     String nodeManagerVersion = request.getNMVersion();
 
     RegisterNodeManagerResponse response = recordFactory
@@ -287,14 +294,26 @@ public class ResourceTrackerService extends AbstractService implements
       return response;
     }
 
-    // Check if this node has minimum allocations
+    // Check if gpu topology of this node is described with correct number of domains
     if (capability.getMemory() < minAllocMb
-        || capability.getVirtualCores() < minAllocVcores
-        || capability.getGPUs() < minAllocGPUs) {
+            || capability.getVirtualCores() < minAllocVcores
+            || capability.getGPUs() < minAllocGPUs) {
       String message =
-          "NodeManager from  " + host
-              + " doesn't satisfy minimum allocations, Sending SHUTDOWN"
-              + " signal to the NodeManager.";
+              "NodeManager from  " + host
+                      + " doesn't satisfy minimum allocations, Sending SHUTDOWN"
+                      + " signal to the NodeManager.";
+      LOG.info(message);
+      response.setDiagnosticsMessage(message);
+      response.setNodeAction(NodeAction.SHUTDOWN);
+      return response;
+    }
+
+    // Check if this node has minimum allocations
+    if (StringUtils.countMatches(gpuTopology, ".") != numGPUDomains) {
+      String message =
+              "NodeManager from  " + host
+                      + " doesn't have properly defined GPU domains, Sending SHUTDOWN"
+                      + " signal to the NodeManager.";
       LOG.info(message);
       response.setDiagnosticsMessage(message);
       response.setNodeAction(NodeAction.SHUTDOWN);
@@ -307,7 +326,7 @@ public class ResourceTrackerService extends AbstractService implements
         .getCurrentKey());    
 
     RMNode rmNode = new RMNodeImpl(nodeId, rmContext, host, cmPort, httpPort,
-        resolve(host), capability, nodeManagerVersion);
+        resolve(host), capability, gpuTopology, nodeManagerVersion);
 
     RMNode oldNode = this.rmContext.getRMNodes().putIfAbsent(nodeId, rmNode);
     if (oldNode == null) {

@@ -103,12 +103,14 @@ public class MockNodes {
     private String httpAddress;
     private int cmdPort;
     private Resource perNode;
+    private String gpuTopology;
     private String rackName;
     private String healthReport;
     private long lastHealthReportTime;
     private NodeState state;
     private Set<String> labels;
 
+    // TODO: MJTHIS: this should be deleted, now just to pass compilation.
     public MockRMNodeImpl(NodeId nodeId, String nodeAddr, String httpAddress,
         Resource perNode, String rackName, String healthReport,
         long lastHealthReportTime, int cmdPort, String hostName, NodeState state,
@@ -117,6 +119,24 @@ public class MockNodes {
       this.nodeAddr = nodeAddr;
       this.httpAddress = httpAddress;
       this.perNode = perNode;
+      this.rackName = rackName;
+      this.healthReport = healthReport;
+      this.lastHealthReportTime = lastHealthReportTime;
+      this.cmdPort = cmdPort;
+      this.hostName = hostName;
+      this.state = state;
+      this.labels = labels;
+    }
+
+    public MockRMNodeImpl(NodeId nodeId, String nodeAddr, String httpAddress,
+        Resource perNode, String gpuTopology, String rackName, String healthReport,
+        long lastHealthReportTime, int cmdPort, String hostName, NodeState state,
+        Set<String> labels) {
+      this.nodeId = nodeId;
+      this.nodeAddr = nodeAddr;
+      this.httpAddress = httpAddress;
+      this.perNode = perNode;
+      this.gpuTopology = gpuTopology;
       this.rackName = rackName;
       this.healthReport = healthReport;
       this.lastHealthReportTime = lastHealthReportTime;
@@ -159,6 +179,11 @@ public class MockNodes {
     @Override
     public Resource getTotalCapability() {
       return this.perNode;
+    }
+
+    @Override
+    public String getGPUTopology() {
+      return this.gpuTopology;
     }
 
     @Override

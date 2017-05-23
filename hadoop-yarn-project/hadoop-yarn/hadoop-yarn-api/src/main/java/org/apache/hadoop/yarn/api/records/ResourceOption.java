@@ -47,6 +47,18 @@ public abstract class ResourceOption {
   @Private
   @Evolving
   protected abstract void setResource(Resource resource);
+
+  /**
+   * Get the gpu topology of the ResourceOption.
+   * @return <em>gpuTopology</em> of the ResourceOption
+   */
+  @Private
+  @Evolving
+  public abstract String getGPUTopology();
+
+  @Private
+  @Evolving
+  protected abstract void setGPUTopology(String gpuTopology);
   
   /**
    * Get timeout for tolerant of resource over-commitment
@@ -68,7 +80,8 @@ public abstract class ResourceOption {
   
   @Override
   public String toString() {
-    return "Resource:" + getResource().toString() 
+    return "Resource:" + getResource().toString()
+        + ", GPU Topology:" + getGPUTopology()
         + ", overCommitTimeout:" + getOverCommitTimeout();
   }
   

@@ -100,6 +100,12 @@ public interface RMNode {
    * @return the total available resource.
    */
   public Resource getTotalCapability();
+
+  /**
+   * the gpu topology.
+   * @return the gpu topology.
+   */
+  public String getGPUTopology();
   
   /**
    * The rack name for this node manager.

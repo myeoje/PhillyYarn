@@ -139,6 +139,21 @@ public class RegisterNodeManagerRequestPBImpl extends RegisterNodeManagerRequest
   }
 
   @Override
+  public String getGPUTopology() {
+    RegisterNodeManagerRequestProtoOrBuilder p = viaProto ? proto : builder;
+    if (!p.hasGpuTopology()) {
+      return "";
+    }
+    return (p.getGpuTopology());
+  }
+
+  @Override
+  public void setGPUTopology(String topology) {
+    maybeInitBuilder();
+    builder.setGpuTopology(topology);
+  }
+
+  @Override
   public NodeId getNodeId() {
     RegisterNodeManagerRequestProtoOrBuilder p = viaProto ? proto : builder;
     if (this.nodeId != null) {

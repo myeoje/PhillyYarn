@@ -91,6 +91,7 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
   private long nextHeartBeatInterval;
   private ResourceTracker resourceTracker;
   private Resource totalResource;
+  private String gpuTopology;
   private int httpPort;
   private String nodeManagerVersionId;
   private String minimumResourceManagerVersion;
@@ -152,15 +153,26 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
         conf.getInt(
             YarnConfiguration.NM_GPUS, YarnConfiguration.DEFAULT_NM_GPUS);
 
-    int GPUAttribute = 0;
-    int pos = 1;
-    while (Integer.bitCount(GPUAttribute) < GPUs) {
-      GPUAttribute = GPUAttribute + pos;
-      pos = pos << 1;
-    }
+    // MJTHIS: we have a explicit configuration field to express gpu topology domains
+    //
+    //int gpuAttribute = 0;
+    //int pos = 1;
+    //while (Integer.bitCount(gpuAttribute) < GPUs) {
+    //  gpuAttribute = gpuAttribute + pos;
+    //  pos = pos << 1;
+    //}
 
-    this.totalResource = Resource.newInstance(memoryMb, virtualCores, GPUs, GPUAttribute);
+    this.totalResource = Resource.newInstance(memoryMb, virtualCores, GPUs);
     metrics.addResource(totalResource);
+
+    //this.gpuDevices =
+    //    conf.getStrings(
+    //        YarnConfiguration.NM_GPU_DEVICES, YarnConfiguration.DEFAULT_NM_GPU_DEVICES)[0];
+
+    this.gpuTopology =
+        conf.getStrings(
+            YarnConfiguration.NM_GPU_TOPOLOGY, YarnConfiguration.DEFAULT_NM_GPU_TOPOLOGY)[0];
+
     this.tokenKeepAliveEnabled = isTokenKeepAliveEnabled(conf);
     this.tokenRemovalDelayMs =
         conf.getInt(YarnConfiguration.RM_NM_EXPIRY_INTERVAL_MS,
@@ -190,7 +202,7 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     super.serviceInit(conf);
     LOG.info("Initialized nodemanager for " + nodeId + ":" +
         " physical-memory=" + memoryMb + " virtual-memory=" + virtualMemoryMb +
-        " virtual-cores=" + virtualCores + " gpus=" + GPUs + " gpu-attribute=" + GPUAttribute);
+        " virtual-cores=" + virtualCores + " gpus=" + GPUs + " gpu-topology=" + gpuTopology);
   }
 
   @Override
@@ -265,7 +277,7 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
       throws YarnException, IOException {
     List<NMContainerStatus> containerReports = getNMContainerStatuses();
     RegisterNodeManagerRequest request =
-        RegisterNodeManagerRequest.newInstance(nodeId, httpPort, totalResource,
+        RegisterNodeManagerRequest.newInstance(nodeId, httpPort, totalResource, gpuTopology,
           nodeManagerVersionId, containerReports, getRunningApplications());
     if (containerReports != null) {
       LOG.info("Registering with RM using containers :" + containerReports);
@@ -318,7 +330,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     }
 
     LOG.info("Registered with ResourceManager as " + this.nodeId
-        + " with total resource of " + this.totalResource);
+        + " with total resource of " + this.totalResource
+        + ", with GPU topology of " + this.gpuTopology);
     LOG.info("Notifying ContainerManager to unblock new container-requests");
     ((ContainerManagerImpl) this.context.getContainerManager())
       .setBlockNewContainerRequests(false);
