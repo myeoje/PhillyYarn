@@ -25,11 +25,11 @@
   <!-- Nodes configuration -->
   <property>
     <name>yarn.sls.nm.memory.mb</name>
-    <value>10240</value>
+    <value>503808</value>
   </property>
   <property>
     <name>yarn.sls.nm.vcores</name>
-    <value>10</value>
+    <value>32</value>
   </property>
   <property>
     <name>yarn.sls.nm.heartbeat.interval.ms</name>
@@ -53,7 +53,7 @@
   <!-- Containers configuration -->
   <property>
     <name>yarn.sls.container.memory.mb</name>
-    <value>1024</value>
+    <value>102400</value>
   </property>
   <property>
     <name>yarn.sls.container.vcores</name>

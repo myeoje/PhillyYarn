@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.yarn.sls.appmaster;
 
+import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
@@ -28,11 +29,13 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.util.ArrayList;
 import java.util.List;
 
 public class TestAMSimulator {
   private ResourceManager rm;
+  private YarnClient yarnClient;
   private YarnConfiguration conf;
 
   @Before
@@ -46,21 +49,29 @@ public class TestAMSimulator {
     rm = new ResourceManager();
     rm.init(conf);
     rm.start();
+
+    yarnClient = YarnClient.createYarnClient();
+    yarnClient.init(conf);
+    yarnClient.start();
   }
 
   class MockAMSimulator extends AMSimulator {
     @Override
-    protected void processResponseQueue()
+    protected void checkTimeOut(long currentTimeMS)
+        throws InterruptedException, YarnException, IOException {
+    }
+    @Override
+    protected void processResponseQueue(long currentTimeMS)
         throws InterruptedException, YarnException, IOException {
     }
 
     @Override
-    protected void sendContainerRequest()
+    protected void sendContainerRequest(long currentTimeMS)
         throws YarnException, IOException, InterruptedException {
     }
 
     @Override
-    protected void checkStop() {
+    protected void checkStop(long currentTimeMS) {
     }
   }
 
@@ -69,7 +80,7 @@ public class TestAMSimulator {
     // Register one app
     MockAMSimulator app = new MockAMSimulator();
     List<ContainerSimulator> containers = new ArrayList<ContainerSimulator>();
-    app.init(1, 1000, containers, rm, null, 0, 1000000l, "user1", "default",
+    app.init(1, 1000, containers, rm, yarnClient, null, 0, 1000000l, "user1", "default", 0,
         false, "app1");
     app.firstStep();
     Assert.assertEquals(1, rm.getRMContext().getRMApps().size());

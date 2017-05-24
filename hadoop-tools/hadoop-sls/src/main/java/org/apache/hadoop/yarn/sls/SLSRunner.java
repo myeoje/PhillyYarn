@@ -304,11 +304,6 @@ public class SLSRunner {
             // wencong: hack for philly job input
             jobGpu = Integer.parseInt(
                     jsonJob.get("job.gpu").toString());
-            // assign gpu number container
-//            for (int idx =0;idx<jobGpu;idx++){
-//              containerList.add(new ContainerSimulator(containerResource,
-//                      5000, "/b5/10.198.141.15", 20, "gpu"));
-//            }
           }
           else {
             // tasks
