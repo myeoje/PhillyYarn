@@ -396,7 +396,7 @@ public class MRAMSimulator extends AMSimulator {
   @Override
   protected void checkStop(long currentTimeMS) {
     if (isFinished) {
-      super.setEndTime(System.currentTimeMillis());
+      super.setEndTime(SLSRunner.NOW());
     }
   }
 

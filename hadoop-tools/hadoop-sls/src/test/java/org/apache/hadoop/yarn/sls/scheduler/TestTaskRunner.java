@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.yarn.sls.scheduler;
 
+import org.apache.hadoop.yarn.sls.SLSRunner;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -237,9 +238,9 @@ public class TestTaskRunner {
     runner.schedule(new PreStartTask(210));
     Thread.sleep(210);
     runner.start();
-    long startedAt = System.currentTimeMillis();
+    long startedAt = SLSRunner.NOW();
     PreStartTask.latch.await(5000, TimeUnit.MILLISECONDS);
-    long runAt = System.currentTimeMillis();
+    long runAt = SLSRunner.NOW();
     Assert.assertTrue(PreStartTask.first);
     Assert.assertTrue(runAt - startedAt >= 200);
   }

@@ -143,7 +143,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
    */
   @Override
   public void firstStep() throws Exception {
-    simulateStartTimeMS = System.currentTimeMillis() - 
+    simulateStartTimeMS = SLSRunner.NOW() -
                           SLSRunner.getRunner().getStartTimeMS();
 
     // submit application, waiting until ACCEPTED
@@ -158,7 +158,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
 
   @Override
   public void middleStep() throws Exception {
-    currentTimeMS = System.currentTimeMillis();
+    currentTimeMS = SLSRunner.NOW();
     // process responses in the queue
     processResponseQueue(currentTimeMS);
     
@@ -198,7 +198,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
       }
     });
 
-    simulateFinishTimeMS = System.currentTimeMillis() -
+    simulateFinishTimeMS = SLSRunner.NOW() -
         SLSRunner.getRunner().getStartTimeMS();
     // record job running information
     ((ResourceSchedulerWrapper)rm.getResourceScheduler())

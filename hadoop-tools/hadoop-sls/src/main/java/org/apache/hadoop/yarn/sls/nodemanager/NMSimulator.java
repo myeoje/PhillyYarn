@@ -50,6 +50,7 @@ import org.apache.hadoop.yarn.server.api.records.NodeStatus;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
+import org.apache.hadoop.yarn.sls.SLSRunner;
 import org.apache.hadoop.yarn.util.Records;
 import org.apache.log4j.Logger;
 
@@ -233,7 +234,7 @@ public class NMSimulator extends TaskRunner.Task {
       // normal container
       // wencong: the lifeTimeMS can be max_long, which means the container reserve the resource
       long theEndTime, theLifeTime;
-      long cur_sys_time = System.currentTimeMillis();
+      long cur_sys_time = SLSRunner.NOW();
       if (lifeTimeMS == Long.MAX_VALUE){
         theEndTime = Long.MAX_VALUE;
       }
@@ -273,7 +274,7 @@ public class NMSimulator extends TaskRunner.Task {
             "container ({1}).", node.getNodeID(), container.getId()));
     deleteContainer(container);
     ContainerSimulator cs = new ContainerSimulator(container.getId(),
-            container.getResource(), lifeTimeMS + System.currentTimeMillis(),
+            container.getResource(), lifeTimeMS + SLSRunner.NOW(),
             lifeTimeMS);
     containerQueue.add(cs);
     runningContainers.put(cs.getId(), cs);

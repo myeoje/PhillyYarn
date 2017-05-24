@@ -437,7 +437,7 @@ public class SLSWebApp extends HttpServlet {
     // package results
     StringBuilder sb = new StringBuilder();
     sb.append("{");
-    sb.append("\"time\":" ).append(System.currentTimeMillis())
+    sb.append("\"time\":" ).append(SLSRunner.NOW())
             .append(",\"jvm.free.memory\":").append(jvmFreeMemoryGB)
             .append(",\"jvm.max.memory\":").append(jvmMaxMemoryGB)
             .append(",\"jvm.total.memory\":").append(jvmTotalMemoryGB)
@@ -482,7 +482,7 @@ public class SLSWebApp extends HttpServlet {
         String appId = para.substring("Job ".length());
 
         sb.append("{");
-        sb.append("\"time\": ").append(System.currentTimeMillis()).append(",");
+        sb.append("\"time\": ").append(SLSRunner.NOW()).append(",");
         sb.append("\"appId\": \"").append(appId).append("\"");
         for(String metric : this.schedulerMetrics.getAppTrackedMetrics()) {
           String key = "variable.app." + appId + "." + metric;
@@ -502,7 +502,7 @@ public class SLSWebApp extends HttpServlet {
       } else if(para.startsWith("Queue ")) {
         String queueName = para.substring("Queue ".length());
         sb.append("{");
-        sb.append("\"time\": ").append(System.currentTimeMillis()).append(",");
+        sb.append("\"time\": ").append(SLSRunner.NOW()).append(",");
         sb.append("\"queueName\": \"").append(queueName).append("\"");
         for(String metric : this.schedulerMetrics.getQueueTrackedMetrics()) {
           String key = "variable.queue." + queueName + "." + metric;

@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.sls.SLSRunner;
 
 @Private
 @Unstable
@@ -108,7 +109,7 @@ public class TaskRunner {
 
     @Override
     public long getDelay(TimeUnit unit) {
-      return unit.convert(nextRun - System.currentTimeMillis(),
+      return unit.convert(nextRun - SLSRunner.NOW(),
         TimeUnit.MILLISECONDS);
     }
 
@@ -158,7 +159,7 @@ public class TaskRunner {
       TimeUnit.MILLISECONDS, queue);
     executor.prestartAllCoreThreads();
 
-    startTimeMS = System.currentTimeMillis();
+    startTimeMS = SLSRunner.NOW();
     for (Object d : preStartQueue) {
       schedule((Task) d, startTimeMS);
     }
@@ -176,7 +177,7 @@ public class TaskRunner {
   }
 
   public void schedule(Task task) {
-    schedule(task, System.currentTimeMillis());
+    schedule(task, SLSRunner.NOW());
   }
 
   public long getStartTimeMS() {

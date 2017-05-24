@@ -22,6 +22,7 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
+import org.apache.hadoop.yarn.sls.SLSRunner;
 import org.apache.hadoop.yarn.sls.conf.SLSConfiguration;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.junit.After;
@@ -99,7 +100,7 @@ public class TestNMSimulator {
   private ContainerId newContainerId(int appId, int appAttemptId, int cId) {
     return BuilderUtils.newContainerId(
         BuilderUtils.newApplicationAttemptId(
-            BuilderUtils.newApplicationId(System.currentTimeMillis(), appId),
+            BuilderUtils.newApplicationId(SLSRunner.NOW(), appId),
             appAttemptId), cId);
   }
 

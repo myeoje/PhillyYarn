@@ -69,6 +69,9 @@ import org.codehaus.jackson.map.ObjectMapper;
 @Private
 @Unstable
 public class SLSRunner {
+
+
+
   // RM, Runner
   private ResourceManager rm;
   private YarnClient yarnClient;
@@ -104,6 +107,16 @@ public class SLSRunner {
 
   // input traces, input-rumen or input-sls
   private boolean isSLS;
+
+  private static long processStartTime;
+  private static final long timeScale = 2;
+
+  public static long NOW(){
+    // should be system current time to pass the test case
+    //return System.currentTimeMillis();
+
+    return processStartTime + (System.currentTimeMillis() - processStartTime) * timeScale;
+  }
   
   public SLSRunner(boolean isSLS, String inputTraces[], String nodeFile,
                    String outputDir, Set<String> trackedApps,
@@ -136,6 +149,8 @@ public class SLSRunner {
         amClassMap.put(amType, Class.forName(conf.get(key)));
       }
     }
+
+    processStartTime = System.currentTimeMillis();
   }
   
   public void start() throws Exception {
@@ -205,6 +220,7 @@ public class SLSRunner {
     Set<String> rackSet = new HashSet<String>();
     for (String hostName : nodeSet) {
       // we randomize the heartbeat start time from zero to 1 interval
+
       NMSimulator nm = new NMSimulator();
       nm.init(hostName, nmMemoryMB, nmVCores, 
           random.nextInt(heartbeatInterval), heartbeatInterval, rm);
@@ -217,7 +233,7 @@ public class SLSRunner {
   }
 
   private void waitForNodesRunning() throws InterruptedException {
-    long startTimeMS = System.currentTimeMillis();
+    long startTimeMS = SLSRunner.NOW();
     while (true) {
       int numRunningNodes = 0;
       for (RMNode node : rm.getRMContext().getRMNodes().values()) {
@@ -234,7 +250,7 @@ public class SLSRunner {
       Thread.sleep(1000);
     }
     LOG.info(MessageFormat.format("SLSRunner takes {0} ms to launch all nodes.",
-            (System.currentTimeMillis() - startTimeMS)));
+            (SLSRunner.NOW() - startTimeMS)));
   }
 
   @SuppressWarnings("unchecked")
