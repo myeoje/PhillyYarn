@@ -102,11 +102,13 @@ public abstract class AMSimulator extends TaskRunner.Task {
   // am type
   protected String amtype;
   // job start/end time
+  protected long traceSubmitTimeMS;
   protected long traceStartTimeMS;
   protected long traceFinishTimeMS;
+  protected long simulateSubmitTimeMS;
   protected long simulateStartTimeMS;
   protected long simulateFinishTimeMS;
-  private long currentTimeMS;
+
   // whether tracked in Metrics
   protected boolean isTracked;
   // progress
@@ -119,12 +121,15 @@ public abstract class AMSimulator extends TaskRunner.Task {
     this.responseQueue = new LinkedBlockingQueue<AllocateResponse>();
   }
 
-  public void init(int id, int heartbeatInterval,
+  public void init(int id, long heartbeatInterval,
                    List<ContainerSimulator> containerList, ResourceManager rm, YarnClient yarnClient, SLSRunner se,
-                   long traceStartTime, long traceFinishTime, String user, String queue, int jobGpu,
+                   long traceSubmitTime, long traceStartTime, long traceFinishTime, String user, String queue, int jobGpu,
                    boolean isTracked, String oldAppId) {
-    super.init(traceStartTime, traceStartTime + 1000000L * heartbeatInterval,
-            heartbeatInterval);
+    // TODO end time is not big enough
+    //super.init(traceSubmitTime, traceStartTime + 1000000L * heartbeatInterval, heartbeatInterval);
+
+    // 3 month
+    super.init(traceSubmitTime, traceSubmitTime + 3 * 31 * 24 * 60 * 60 * heartbeatInterval, heartbeatInterval);
     this.user = user;
     this.rm = rm;
     this.yarnClient = yarnClient;
@@ -133,6 +138,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
     this.queue = queue;
     this.oldAppId = oldAppId;
     this.isTracked = isTracked;
+    this.traceSubmitTimeMS = traceSubmitTime;
     this.traceStartTimeMS = traceStartTime;
     this.traceFinishTimeMS = traceFinishTime;
     this.jobGpu = jobGpu;
@@ -143,7 +149,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
    */
   @Override
   public void firstStep() throws Exception {
-    simulateStartTimeMS = SLSRunner.NOW() -
+    simulateSubmitTimeMS = SLSRunner.NOW() -
                           SLSRunner.getRunner().getStartTimeMS();
 
     // submit application, waiting until ACCEPTED
@@ -158,7 +164,8 @@ public abstract class AMSimulator extends TaskRunner.Task {
 
   @Override
   public void middleStep() throws Exception {
-    currentTimeMS = SLSRunner.NOW();
+    long currentTimeMS = SLSRunner.NOW();
+    //LOG.info(MessageFormat.format("middle step: {0}", currentTimeMS - SLSRunner.getRunner().getStartTimeMS()));
     // process responses in the queue
     processResponseQueue(currentTimeMS);
     
@@ -174,6 +181,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
 
   @Override
   public void lastStep() throws Exception {
+    long currentTimeMS = SLSRunner.NOW();
     LOG.info(MessageFormat.format("Application {0} is shutting down.", appId));
     // unregister tracking
     if (isTracked) {
@@ -198,13 +206,13 @@ public abstract class AMSimulator extends TaskRunner.Task {
       }
     });
 
-    simulateFinishTimeMS = SLSRunner.NOW() -
+    simulateFinishTimeMS = currentTimeMS -
         SLSRunner.getRunner().getStartTimeMS();
     // record job running information
     ((ResourceSchedulerWrapper)rm.getResourceScheduler())
-         .addAMRuntime(appId, 
-                      traceStartTimeMS, traceFinishTimeMS, 
-                      simulateStartTimeMS, simulateFinishTimeMS);
+         .addAMRuntime(oldAppId, appId,
+                      traceSubmitTimeMS, traceStartTimeMS, traceFinishTimeMS,
+                      simulateSubmitTimeMS, simulateStartTimeMS, simulateFinishTimeMS);
   }
   
   protected ResourceRequest createResourceRequest(

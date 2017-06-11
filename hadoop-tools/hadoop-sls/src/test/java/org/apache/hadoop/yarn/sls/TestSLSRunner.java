@@ -53,7 +53,7 @@ public class TestSLSRunner {
     SLSRunner.main(args);
 
     // wait for 20 seconds before stop
-    int count = 30;
+    int count = 7200;
     while (count >= 0) {
       Thread.sleep(1000);
 
@@ -63,6 +63,7 @@ public class TestSLSRunner {
             "(TaskRunner.Task): " + exceptionList.get(0).getMessage());
         break;
       }
+
       count--;
     }
 

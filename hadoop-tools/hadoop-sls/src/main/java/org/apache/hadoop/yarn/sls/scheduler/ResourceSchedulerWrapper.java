@@ -490,8 +490,8 @@ public class ResourceSchedulerWrapper
     // application running information
     jobRuntimeLogBW = new BufferedWriter(
             new FileWriter(metricsOutputDir + "/jobruntime.csv"));
-    jobRuntimeLogBW.write("JobID,real_start_time,real_end_time," +
-            "simulate_start_time,simulate_end_time" + EOL);
+    jobRuntimeLogBW.write("OriginalJobID,JobID,real_submit_time,real_start_time,real_end_time," +
+            "simulate_submit_time,simulate_start_time,simulate_end_time" + EOL);
     jobRuntimeLogBW.flush();
   }
 
@@ -723,15 +723,15 @@ public class ResourceSchedulerWrapper
   }
 
   // the following functions are used by AMSimulator
-  public void addAMRuntime(ApplicationId appId,
-                           long traceStartTimeMS, long traceEndTimeMS,
-                           long simulateStartTimeMS, long simulateEndTimeMS) {
+  public void addAMRuntime(String oldAppId, ApplicationId appId,
+                           long traceSubmitTimeMS, long traceStartTimeMS, long traceEndTimeMS,
+                           long simulateSubmitTimeMS, long simulateStartTimeMS, long simulateEndTimeMS) {
     if (metricsON) {
       try {
         // write job runtime information
         StringBuilder sb = new StringBuilder();
-        sb.append(appId).append(",").append(traceStartTimeMS).append(",")
-            .append(traceEndTimeMS).append(",").append(simulateStartTimeMS)
+        sb.append(oldAppId).append(",").append(appId).append(",").append(traceSubmitTimeMS).append(",").append(traceStartTimeMS).append(",")
+            .append(traceEndTimeMS).append(",").append(simulateSubmitTimeMS).append(",").append(simulateStartTimeMS)
             .append(",").append(simulateEndTimeMS);
         jobRuntimeLogBW.write(sb.toString() + EOL);
         jobRuntimeLogBW.flush();

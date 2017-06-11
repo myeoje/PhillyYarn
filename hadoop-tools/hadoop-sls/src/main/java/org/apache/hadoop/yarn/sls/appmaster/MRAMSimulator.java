@@ -120,12 +120,12 @@ public class MRAMSimulator extends AMSimulator {
 
   public final Logger LOG = Logger.getLogger(MRAMSimulator.class);
 
-  public void init(int id, int heartbeatInterval,
+  public void init(int id, long heartbeatInterval,
                    List<ContainerSimulator> containerList, ResourceManager rm, YarnClient yarnClient, SLSRunner se,
-                   long traceStartTime, long traceFinishTime, String user, String queue, int jobGpu,
+                   long traceSubmitTime, long traceStartTime, long traceFinishTime, String user, String queue, int jobGpu,
                    boolean isTracked, String oldAppId) {
     super.init(id, heartbeatInterval, containerList, rm, yarnClient, se,
-              traceStartTime, traceFinishTime, user, queue, jobGpu,
+              traceSubmitTime, traceStartTime, traceFinishTime, user, queue, jobGpu,
               isTracked, oldAppId);
     amtype = "mapreduce";
     

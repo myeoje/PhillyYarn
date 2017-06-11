@@ -109,7 +109,7 @@ public class SLSRunner {
   private boolean isSLS;
 
   private static long processStartTime;
-  private static final long timeScale = 2;
+  private static final long timeScale = 3;
 
   public static long NOW(){
     // should be system current time to pass the test case
@@ -138,7 +138,7 @@ public class SLSRunner {
     conf = new Configuration(false);
     conf.addResource("sls-runner.xml");
     // runner
-    int poolSize = conf.getInt(SLSConfiguration.RUNNER_POOL_SIZE, 
+    int poolSize = conf.getInt(SLSConfiguration.RUNNER_POOL_SIZE,
                                 SLSConfiguration.RUNNER_POOL_SIZE_DEFAULT); 
     SLSRunner.runner.setQueueSize(poolSize);
     // <AMType, Class> map
@@ -294,6 +294,8 @@ public class SLSRunner {
           Map jsonJob = i.next();
 
           // load job information
+          long jobSubmitTime = Long.parseLong(
+                  jsonJob.get("job.submit.ms").toString());
           long jobStartTime = Long.parseLong(
                   jsonJob.get("job.start.ms").toString());
           long jobFinishTime = Long.parseLong(
@@ -348,7 +350,7 @@ public class SLSRunner {
                   amClassMap.get(amType), new Configuration());
           if (amSim != null) {
             amSim.init(AM_ID++, heartbeatInterval, containerList, rm, yarnClient,
-                    this, jobStartTime, jobFinishTime, user, queue, jobGpu,
+                    this, jobSubmitTime, jobStartTime, jobFinishTime, user, queue, jobGpu,
                     isTracked, oldAppId);
             runner.schedule(amSim);
             maxRuntime = Math.max(maxRuntime, jobFinishTime);
@@ -432,8 +434,10 @@ public class SLSRunner {
           AMSimulator amSim = (AMSimulator) ReflectionUtils.newInstance(
                   amClassMap.get(jobType), conf);
           if (amSim != null) {
+            // TODO: simply use jobStartTimeMS as traceSubmitTime
+            // we need to fix it later
             amSim.init(AM_ID ++, heartbeatInterval, containerList,
-                    rm, yarnClient, this, jobStartTimeMS, jobFinishTimeMS, user, jobQueue, 0,
+                    rm, yarnClient, this, jobStartTimeMS, jobStartTimeMS, jobFinishTimeMS, user, jobQueue, 0,
                     isTracked, oldJobId);
             runner.schedule(amSim);
             maxRuntime = Math.max(maxRuntime, jobFinishTimeMS);

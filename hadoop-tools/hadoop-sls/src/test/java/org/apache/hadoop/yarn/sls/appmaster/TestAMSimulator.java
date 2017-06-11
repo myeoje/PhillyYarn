@@ -80,7 +80,7 @@ public class TestAMSimulator {
     // Register one app
     MockAMSimulator app = new MockAMSimulator();
     List<ContainerSimulator> containers = new ArrayList<ContainerSimulator>();
-    app.init(1, 1000, containers, rm, yarnClient, null, 0, 1000000l, "user1", "default", 0,
+    app.init(1, 1000, containers, rm, yarnClient, null, 0, 0, 1000000l, "user1", "default", 0,
         false, "app1");
     app.firstStep();
     Assert.assertEquals(1, rm.getRMContext().getRMApps().size());

@@ -47,15 +47,14 @@ import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 
+import org.apache.hadoop.yarn.sls.SLSSimpleRunner;
 import org.apache.hadoop.yarn.sls.scheduler.ContainerSimulator;
-import org.apache.hadoop.yarn.sls.SLSRunner;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
-import sun.rmi.runtime.Log;
 
 @Private
 @Unstable
-public class PhillyAMSimulator extends AMSimulator {
+public class PhillyAMSimpleSimulator extends AMSimpleSimulator {
     /*
     Vocabulary Used:
     pending -> requests which are NOT yet sent to RM
@@ -114,14 +113,16 @@ public class PhillyAMSimulator extends AMSimulator {
     // request node list
     private String nodeList = null;
 
+
+
     // resource for AM container
     private final static int MR_AM_CONTAINER_RESOURCE_MEMORY_MB = 1024;
     private final static int MR_AM_CONTAINER_RESOURCE_VCORES = 1;
 
-    public final Logger LOG = Logger.getLogger(PhillyAMSimulator.class);
+    public final Logger LOG = Logger.getLogger(PhillyAMSimpleSimulator.class);
 
     public void init(int id, long heartbeatInterval,
-                     List<ContainerSimulator> containerList, ResourceManager rm, YarnClient yarnClient, SLSRunner se,
+                     List<ContainerSimulator> containerList, ResourceManager rm, YarnClient yarnClient, SLSSimpleRunner se,
                      long traceSubmitTime, long traceStartTime, long traceFinishTime, String user, String queue, int jobGpu,
                      boolean isTracked, String oldAppId) {
         super.init(id, heartbeatInterval, containerList, rm, yarnClient, se,
@@ -138,6 +139,7 @@ public class PhillyAMSimulator extends AMSimulator {
 //            }
 //        }
 //        allGpus.addAll(pendingGpuContainers);
+
         totalContainers = jobGpu / 4;
         // TODO: hack for debugging, need to fix it
         //totalContainers = pendingGpuContainers.size();
@@ -283,7 +285,7 @@ public class PhillyAMSimulator extends AMSimulator {
                     // Get AM container
                     Container container = response.getAllocatedContainers().get(0);
                     se.getNmMap().get(container.getNodeId())
-                            .addNewContainer(container, -1L);
+                            .addNewContainer(container, -1L, currentTimeMS);
                     // Start AM container
                     amContainer = container;
 
@@ -291,8 +293,8 @@ public class PhillyAMSimulator extends AMSimulator {
                     String amContainerHostname = se.getNmMap().get(container.getNodeId()).getNode().getHostName();
                     phillyAM = new PhillyAMWrapper(yarnClient, new AppMasterContainer(amContainerHostname));
 
-                    LOG.debug(MessageFormat.format("Application {0} starts its " +
-                            "AM container ({1}).", appId, amContainer.getId()));
+                    LOG.debug(MessageFormat.format("[{2}] Application {0} starts its " +
+                            "AM container ({1}).", appId, amContainer.getId(), currentTimeMS));
                     isAMContainerRunning = true;
                 }
             }
@@ -308,8 +310,8 @@ public class PhillyAMSimulator extends AMSimulator {
                     ContainerId containerId = cs.getContainerId();
                     if (cs.getExitStatus() == ContainerExitStatus.SUCCESS) {
                         if (assignedGpuContainers.containsKey(containerId)) {
-                            LOG.debug(MessageFormat.format("Application {0} has one" +
-                                    "gpu work finished ({1}).", appId, containerId));
+                            LOG.debug(MessageFormat.format("[{2}] Application {0} has one" +
+                                    "gpu work finished ({1}).", appId, containerId, currentTimeMS));
                             assignedGpuContainers.remove(containerId);
                             finishedContainers ++;
                         } else {
@@ -342,9 +344,10 @@ public class PhillyAMSimulator extends AMSimulator {
                 se.getNmMap().get(amContainer.getNodeId())
                         .cleanupContainer(amContainer.getId());
                 isAMContainerRunning = false;
-                LOG.debug(MessageFormat.format("Application {0} sends out event " +
-                        "to clean up its AM container.", appId));
+                LOG.debug(MessageFormat.format("[{1}] Application {0} sends out event " +
+                        "to clean up its AM container.", appId, currentTimeMS));
                 isFinished = true;
+                isAMFinished = true;
                 break;
             }
 
@@ -352,25 +355,26 @@ public class PhillyAMSimulator extends AMSimulator {
             for (Container container : response.getAllocatedContainers()) {
                 if (! scheduledGpuContainers.isEmpty()) {
                     ContainerSimulator cs = scheduledGpuContainers.remove();
-                    LOG.debug(MessageFormat.format("Application {0} starts a " +
-                            "launch a Gpu worker ({1}).", appId, container.getId()));
+                    LOG.debug(MessageFormat.format("[{2}] Application {0} starts a " +
+                            "launch a Gpu worker ({1}).", appId, container.getId(), currentTimeMS));
                     assignedGpuContainers.put(container.getId(), cs);
                     allocatedContainer.put(container.getId(), container);
                     // just reserve, so use Long.MAX_VALUE as the lifeTime
                     se.getNmMap().get(container.getNodeId())
-                            .addNewContainer(container, Long.MAX_VALUE);
+                            .addNewContainer(container, Long.MAX_VALUE, currentTimeMS);
 
                     LOG.debug(MessageFormat.format("Application {0} assignedGpus {1}.", appId, assignedGpuContainers.size()));
                     if (assignedGpuContainers.size() == totalContainers)
                     {
-                        simulateStartTimeMS = currentTimeMS - SLSRunner.getRunner().getStartTimeMS();
+                        simulateStartTimeMS = currentTimeMS;
+                        LOG.info(MessageFormat.format("simulate start time : {0}", simulateStartTimeMS));
                         enableAllocatingTimeout = false;
                         LOG.debug(MessageFormat.format("Application {0} starts with all container available now.", appId));
                         // all GPU container assigned, start the work
                         for (Map.Entry<ContainerId, ContainerSimulator> entry: assignedGpuContainers.entrySet()){
                             Container cc = allocatedContainer.get(entry.getKey());
                             se.getNmMap().get(cc.getNodeId())
-                                    .relaunchContainer(cc, cs.getLifeTime(), SLSRunner.NOW());
+                                    .relaunchContainer(cc, cs.getLifeTime(), currentTimeMS);
                         }
                     }
                 }
@@ -428,8 +432,9 @@ public class PhillyAMSimulator extends AMSimulator {
                 // determine container number
                 pendingGpuContainers.clear();
                 allGpus.clear();
-                assert (jobGpu % nodeGroup.getNumGpusPerContainer() == 0);
+                //assert (jobGpu % nodeGroup.getNumGpusPerContainer() == 0);
                 int containerNum = jobGpu / nodeGroup.getNumGpusPerContainer();
+                if (jobGpu % nodeGroup.getNumGpusPerContainer() != 0 ) containerNum++;
                 for (int i =0;i< containerNum;i++) {
                     final int gpuNumber = nodeGroup.getNumGpusPerContainer();
                     pendingGpuContainers.add(new ContainerSimulator(Resource.newInstance(gpuNumber * 100 * 1024, gpuNumber),
@@ -440,8 +445,8 @@ public class PhillyAMSimulator extends AMSimulator {
 
 
                 ask = packageRequests(pendingGpuContainers, PRIORITY_GPU, default_rack, nodeList,true);
-                LOG.debug(MessageFormat.format("Application {0} sends out request for {1} gpu workers."
-                        , appId, pendingGpuContainers.size()));
+                LOG.debug(MessageFormat.format("[{2}] Application {0} sends out request for {1} gpu workers."
+                        , appId, pendingGpuContainers.size(), currentTimeMS));
                 scheduledGpuContainers.addAll(pendingGpuContainers);
                 pendingGpuContainers.clear();
 
@@ -495,7 +500,7 @@ public class PhillyAMSimulator extends AMSimulator {
     @Override
     protected void checkStop(long currentTimeMS) {
         if (isFinished) {
-            super.setEndTime(SLSRunner.NOW());
+
         }
     }
 
@@ -511,5 +516,7 @@ public class PhillyAMSimulator extends AMSimulator {
         scheduledGpuContainers.clear();
         allocatedContainer.clear();
         responseQueue.clear();
+
+        SLSSimpleRunner.getSimplerTimer().addFinishedAM();
     }
 }

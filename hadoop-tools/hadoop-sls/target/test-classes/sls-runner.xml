@@ -47,7 +47,7 @@
   </property>
   <property>
     <name>yarn.sls.am.type.philly</name>
-    <value>org.apache.hadoop.yarn.sls.appmaster.PhillyAMSimulator</value>
+    <value>org.apache.hadoop.yarn.sls.appmaster.PhillyAMSimpleSimulator</value>
   </property>
 
   <!-- Containers configuration -->
