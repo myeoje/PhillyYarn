@@ -574,7 +574,7 @@ public class FairScheduler extends
    * user. This will accept a new app even if the user or queue is above
    * configured limits, but the app will not be marked as runnable.
    */
-  protected synchronized void addApplication(ApplicationId applicationId,
+  public synchronized void addApplication(ApplicationId applicationId,
       String queueName, String user, boolean isAppRecovering) {
     if (queueName == null || queueName.isEmpty()) {
       String message = "Reject application " + applicationId +
@@ -639,7 +639,7 @@ public class FairScheduler extends
   /**
    * Add a new application attempt to the scheduler.
    */
-  protected synchronized void addApplicationAttempt(
+  public synchronized void addApplicationAttempt(
       ApplicationAttemptId applicationAttemptId,
       boolean transferStateFromPreviousAttempt,
       boolean isAttemptRecovering) {

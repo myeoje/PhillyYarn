@@ -142,7 +142,7 @@ public class TestRM extends ParameterizedSchedulerTestBase {
     rm.stop();
   }
 
-  @Test (timeout = 30000)
+  @Test //(timeout = 30000)
   public void testAppOnMultiNode() throws Exception {
     Logger rootLogger = LogManager.getRootLogger();
     rootLogger.setLevel(Level.DEBUG);
