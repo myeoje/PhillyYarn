@@ -82,7 +82,8 @@ public class NMSimulator extends TaskRunner.Task {
           throws IOException, YarnException {
     //super.init(dispatchTime, dispatchTime + 1000000L * heartBeatInterval, heartBeatInterval);
     // 3 month
-    super.init(dispatchTime, 3 * 31 * 24 * 60 * 60 * heartBeatInterval, heartBeatInterval);
+    long endTime = 3L * 31L * 24L * 60L * 60L * (long)heartBeatInterval;
+    super.init(dispatchTime, endTime, heartBeatInterval);
     // create resource
     String rackHostName[] = SLSUtils.getRackHostName(nodeIdStr);
     this.node = NodeInfo.newNodeInfo(rackHostName[0], rackHostName[1], 

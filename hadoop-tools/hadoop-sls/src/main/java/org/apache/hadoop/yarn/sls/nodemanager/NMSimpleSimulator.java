@@ -46,18 +46,16 @@ import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
 import org.apache.hadoop.yarn.server.api.records.NodeStatus;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeAddedSchedulerEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
-import org.apache.hadoop.yarn.sls.SLSRunner;
 import org.apache.hadoop.yarn.sls.SLSSimpleRunner;
 import org.apache.hadoop.yarn.sls.scheduler.ContainerSimpleSimulator;
 import org.apache.hadoop.yarn.sls.scheduler.SimpleTimer;
 import org.apache.hadoop.yarn.util.Records;
 import org.apache.log4j.Logger;
 
-import org.apache.hadoop.yarn.sls.scheduler.ContainerSimulator;
-import org.apache.hadoop.yarn.sls.scheduler.TaskRunner;
 import org.apache.hadoop.yarn.sls.utils.SLSUtils;
-import sun.java2d.pipe.SpanShapeRenderer;
 
 @Private
 @Unstable
@@ -73,6 +71,7 @@ public class NMSimpleSimulator{
     private List<ContainerId> amContainerList;
     // resource manager
     private ResourceManager rm;
+    private FairScheduler fs;
     // heart beat response id
     private int RESPONSE_ID = 1;
     private final static Logger LOG = Logger.getLogger(NMSimpleSimulator.class);
@@ -80,7 +79,7 @@ public class NMSimpleSimulator{
     private long dispatchTime;
     private boolean isRunning;
     public void init(String nodeIdStr, int memory, int cores,
-                     long dispatchTime, long heartBeatInterval, ResourceManager rm)
+                     long dispatchTime, long heartBeatInterval, ResourceManager rm, FairScheduler fs)
             throws IOException, YarnException {
         //super.init(dispatchTime, dispatchTime + 1000000L * heartBeatInterval, heartBeatInterval);
         // 3 month
@@ -94,6 +93,7 @@ public class NMSimpleSimulator{
         this.node = NodeInfo.newNodeInfo(rackHostName[0], rackHostName[1],
                 BuilderUtils.newResource(memory, cores));
         this.rm = rm;
+        this.fs = fs;
         // init data structures
         completedContainerList = new ArrayList<ContainerId>();
         releasedContainerList = new ArrayList<ContainerId>();
@@ -101,15 +101,21 @@ public class NMSimpleSimulator{
         runningContainers =
                 new ConcurrentHashMap<ContainerId, ContainerSimpleSimulator>();
 
-        // register NM with RM
-        RegisterNodeManagerRequest req =
-                Records.newRecord(RegisterNodeManagerRequest.class);
-        req.setNodeId(node.getNodeID());
-        req.setResource(node.getTotalCapability());
-        req.setHttpPort(80);
-        RegisterNodeManagerResponse response = rm.getResourceTrackerService()
-                .registerNodeManager(req);
-        masterKey = response.getNMTokenMasterKey();
+        if(SLSSimpleRunner.isSimpleRMMode()) {
+            NodeAddedSchedulerEvent nodeEvent = new NodeAddedSchedulerEvent(node);
+            fs.handle(nodeEvent);
+        }
+        else {
+            // register NM with RM
+            RegisterNodeManagerRequest req =
+                    Records.newRecord(RegisterNodeManagerRequest.class);
+            req.setNodeId(node.getNodeID());
+            req.setResource(node.getTotalCapability());
+            req.setHttpPort(80);
+            RegisterNodeManagerResponse response = rm.getResourceTrackerService()
+                    .registerNodeManager(req);
+            masterKey = response.getNMTokenMasterKey();
+        }
     }
 
     public int getHeartBeatIntervalSecond()

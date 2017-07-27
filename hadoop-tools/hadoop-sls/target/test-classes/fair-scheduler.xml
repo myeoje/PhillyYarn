@@ -29,149 +29,22 @@
     <maxRunningJobs>1000</maxRunningJobs>
   </user>
   <userMaxAppsDefault>1000</userMaxAppsDefault>
-  <defaultQueueSchedulingPolicy>fair</defaultQueueSchedulingPolicy>
-  <queue name="anlgvc">
-    <weight>1</weight>
-    <queue name="fifo">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-      <schedulingPolicy>fifo</schedulingPolicy>
-    </queue>
-    <queue name="parallel">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
+  <queue name="sls_queue_1">
+    <minResources>1024 mb, 1 vcores</minResources>
+    <schedulingMode>fair</schedulingMode>
+    <weight>0.25</weight>
+    <minSharePreemptionTimeout>2</minSharePreemptionTimeout>
   </queue>
-
-  <queue name="cogsrvc">
-    <weight>80</weight>
-    <queue name="fifo">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-      <schedulingPolicy>fifo</schedulingPolicy>
-    </queue>
-    <queue name="parallel">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
+  <queue name="sls_queue_2">
+    <minResources>1024 mb, 1 vcores</minResources>
+    <schedulingMode>fair</schedulingMode>
+    <weight>0.25</weight>
+    <minSharePreemptionTimeout>2</minSharePreemptionTimeout>
   </queue>
-
-  <queue name="gcrexpress">
-    <weight>129</weight>
-    <queue name="fifo">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-      <schedulingPolicy>fifo</schedulingPolicy>
-    </queue>
-    <queue name="parallel">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
+  <queue name="sls_queue_3">
+    <minResources>1024 mb, 1 vcores</minResources>
+    <weight>0.5</weight>
+    <schedulingMode>fair</schedulingMode>
+    <minSharePreemptionTimeout>2</minSharePreemptionTimeout>
   </queue>
-
-  <queue name="intvc">
-    <weight>1</weight>
-    <queue name="fifo">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-      <schedulingPolicy>fifo</schedulingPolicy>
-    </queue>
-    <queue name="parallel">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
-  </queue>
-
-  <queue name="ipgadsvc">
-    <weight>1</weight>
-    <queue name="fifo">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-      <schedulingPolicy>fifo</schedulingPolicy>
-    </queue>
-    <queue name="parallel">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
-  </queue>
-
-  <queue name="ipgsp">
-    <weight>144</weight>
-    <queue name="fifo">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-      <schedulingPolicy>fifo</schedulingPolicy>
-    </queue>
-    <queue name="parallel">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
-    <queue name="production">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
-  </queue>
-
-  <queue name="ipgsrch">
-    <weight>1</weight>
-    <queue name="fifo">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-      <schedulingPolicy>fifo</schedulingPolicy>
-    </queue>
-    <queue name="parallel">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
-  </queue>
-
-  <queue name="msrai">
-    <weight>1</weight>
-    <queue name="fifo">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-      <schedulingPolicy>fifo</schedulingPolicy>
-    </queue>
-    <queue name="parallel">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
-  </queue>
-
-  <queue name="msrlabs">
-    <weight>192</weight>
-    <queue name="fifo">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-      <schedulingPolicy>fifo</schedulingPolicy>
-    </queue>
-    <queue name="parallel">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
-  </queue>
-
-  <queue name="pnrsy">
-    <weight>138</weight>
-    <queue name="fifo">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-      <schedulingPolicy>fifo</schedulingPolicy>
-    </queue>
-    <queue name="parallel">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
-  </queue>
-
-  <queue name="resrchvc">
-    <weight>32</weight>
-    <queue name="fifo">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-      <schedulingPolicy>fifo</schedulingPolicy>
-    </queue>
-    <queue name="parallel">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
-  </queue>
-
-  <queue name="sdrgvc">
-    <weight>1</weight>
-    <queue name="fifo">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-      <schedulingPolicy>fifo</schedulingPolicy>
-    </queue>
-    <queue name="parallel">
-      <minResources>102400 mb,1 vcores</minResources><weight>1</weight>
-    </queue>
-  </queue>
-
-  <queuePlacementPolicy>
-    <rule name="specified" create="false" />
-    <rule name="primaryGroup" create="false" />
-    <rule name="default" queue="pnrsy.parallel" />
-  </queuePlacementPolicy>
-
-  <defaultMinSharePreemptionTimeout>60</defaultMinSharePreemptionTimeout>
-  <defaultFairSharePreemptionTimeout>60</defaultFairSharePreemptionTimeout>
-  <defaultFairSharePreemptionThreshold>0.9</defaultFairSharePreemptionThreshold>
 </allocations>

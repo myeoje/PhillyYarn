@@ -12,6 +12,7 @@
   See the License for the specific language governing permissions and
   limitations under the License. See accompanying LICENSE file.
 -->
+
 <project xmlns="http://maven.apache.org/POM/4.0.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -28,8 +29,19 @@
   <description>Apache Hadoop Scheduler Load Simulator</description>
   <name>Apache Hadoop Scheduler Load Simulator</name>
   <packaging>jar</packaging>
-
+  <repositories>
+    <repository>
+      <id>data-local</id>
+      <name>data</name>
+      <url>file://${project.basedir}/repo</url>
+    </repository>
+  </repositories>
   <dependencies>
+    <dependency>
+      <groupId>com.microsoft.philly</groupId>
+      <artifactId>philly-appmaster</artifactId>
+      <version>0.0.52</version>
+    </dependency>
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>

@@ -66,6 +66,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptState;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
 import org.apache.hadoop.yarn.sls.SLSSimpleRunner;
 import org.apache.hadoop.yarn.sls.scheduler.SimpleTimer;
 import org.apache.hadoop.yarn.util.Records;
@@ -84,6 +85,7 @@ public abstract class AMSimpleSimulator {
     // resource manager
     protected ResourceManager rm;
     protected YarnClient yarnClient;
+    protected FairScheduler fs;
     // main
     protected SLSSimpleRunner se;
     // application
@@ -128,7 +130,7 @@ public abstract class AMSimpleSimulator {
     }
 
     public void init(int id, long heartbeatInterval,
-                     List<ContainerSimulator> containerList, ResourceManager rm, YarnClient yarnClient, SLSSimpleRunner se,
+                     List<ContainerSimulator> containerList, ResourceManager rm, YarnClient yarnClient, FairScheduler fs, SLSSimpleRunner se,
                      long traceSubmitTime, long traceStartTime, long traceFinishTime, String user, String queue, int jobGpu,
                      boolean isTracked, String oldAppId) {
         // TODO end time is not big enough
@@ -142,6 +144,7 @@ public abstract class AMSimpleSimulator {
         this.user = user;
         this.rm = rm;
         this.yarnClient = yarnClient;
+        this.fs = fs;
         this.se = se;
         this.user = user;
         this.queue = queue;
@@ -307,51 +310,58 @@ public abstract class AMSimpleSimulator {
         GetNewApplicationResponse newAppResponse =
                 rm.getClientRMService().getNewApplication(newAppRequest);
         appId = newAppResponse.getApplicationId();
+        ApplicationAttemptId attemptId = ApplicationAttemptId.newInstance(appId, 1);
 
-        // submit the application
-        final SubmitApplicationRequest subAppRequest =
-                Records.newRecord(SubmitApplicationRequest.class);
-        ApplicationSubmissionContext appSubContext =
-                Records.newRecord(ApplicationSubmissionContext.class);
-        appSubContext.setApplicationId(appId);
-        appSubContext.setMaxAppAttempts(1);
-        appSubContext.setQueue(queue);
-        appSubContext.setPriority(Priority.newInstance(0));
-        ContainerLaunchContext conLauContext =
-                Records.newRecord(ContainerLaunchContext.class);
-        conLauContext.setApplicationACLs(
-                new HashMap<ApplicationAccessType, String>());
-        conLauContext.setCommands(new ArrayList<String>());
-        conLauContext.setEnvironment(new HashMap<String, String>());
-        conLauContext.setLocalResources(new HashMap<String, LocalResource>());
-        conLauContext.setServiceData(new HashMap<String, ByteBuffer>());
-        appSubContext.setAMContainerSpec(conLauContext);
-        appSubContext.setUnmanagedAM(true);
-        subAppRequest.setApplicationSubmissionContext(appSubContext);
-        UserGroupInformation ugi = UserGroupInformation.createRemoteUser(user);
-        ugi.doAs(new PrivilegedExceptionAction<Object>() {
-            @Override
-            public Object run() throws YarnException {
-                rm.getClientRMService().submitApplication(subAppRequest);
-                return null;
-            }
-        });
-        LOG.info(MessageFormat.format("Submit a new application {0}", appId));
-
-        // waiting until application ACCEPTED
-        RMApp app = rm.getRMContext().getRMApps().get(appId);
-        while(app.getState() != RMAppState.ACCEPTED) {
-            Thread.sleep(10);
+        if (SLSSimpleRunner.isSimpleRMMode()) {
+            fs.addApplication(appId, queue, user, false);
+            fs.addApplicationAttempt(attemptId, false, false);
         }
+        else {
+            // submit the application
+            final SubmitApplicationRequest subAppRequest =
+                    Records.newRecord(SubmitApplicationRequest.class);
+            ApplicationSubmissionContext appSubContext =
+                    Records.newRecord(ApplicationSubmissionContext.class);
+            appSubContext.setApplicationId(appId);
+            appSubContext.setMaxAppAttempts(1);
+            appSubContext.setQueue(queue);
+            appSubContext.setPriority(Priority.newInstance(0));
+            ContainerLaunchContext conLauContext =
+                    Records.newRecord(ContainerLaunchContext.class);
+            conLauContext.setApplicationACLs(
+                    new HashMap<ApplicationAccessType, String>());
+            conLauContext.setCommands(new ArrayList<String>());
+            conLauContext.setEnvironment(new HashMap<String, String>());
+            conLauContext.setLocalResources(new HashMap<String, LocalResource>());
+            conLauContext.setServiceData(new HashMap<String, ByteBuffer>());
+            appSubContext.setAMContainerSpec(conLauContext);
+            appSubContext.setUnmanagedAM(true);
+            subAppRequest.setApplicationSubmissionContext(appSubContext);
+            UserGroupInformation ugi = UserGroupInformation.createRemoteUser(user);
+            ugi.doAs(new PrivilegedExceptionAction<Object>() {
+                @Override
+                public Object run() throws YarnException {
+                    rm.getClientRMService().submitApplication(subAppRequest);
+                    return null;
+                }
+            });
+            LOG.info(MessageFormat.format("Submit a new application {0}", appId));
 
-        // Waiting until application attempt reach LAUNCHED
-        // "Unmanaged AM must register after AM attempt reaches LAUNCHED state"
-        this.appAttemptId = rm.getRMContext().getRMApps().get(appId)
-                .getCurrentAppAttempt().getAppAttemptId();
-        RMAppAttempt rmAppAttempt = rm.getRMContext().getRMApps().get(appId)
-                .getCurrentAppAttempt();
-        while (rmAppAttempt.getAppAttemptState() != RMAppAttemptState.LAUNCHED) {
-            Thread.sleep(10);
+            // waiting until application ACCEPTED
+            RMApp app = rm.getRMContext().getRMApps().get(appId);
+            while (app.getState() != RMAppState.ACCEPTED) {
+                Thread.sleep(10);
+            }
+
+            // Waiting until application attempt reach LAUNCHED
+            // "Unmanaged AM must register after AM attempt reaches LAUNCHED state"
+            this.appAttemptId = rm.getRMContext().getRMApps().get(appId)
+                    .getCurrentAppAttempt().getAppAttemptId();
+            RMAppAttempt rmAppAttempt = rm.getRMContext().getRMApps().get(appId)
+                    .getCurrentAppAttempt();
+            while (rmAppAttempt.getAppAttemptState() != RMAppAttemptState.LAUNCHED) {
+                Thread.sleep(10);
+            }
         }
     }
 

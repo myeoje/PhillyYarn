@@ -45,6 +45,7 @@ import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 
 import org.apache.hadoop.yarn.sls.SLSSimpleRunner;
@@ -122,10 +123,10 @@ public class PhillyAMSimpleSimulator extends AMSimpleSimulator {
     public final Logger LOG = Logger.getLogger(PhillyAMSimpleSimulator.class);
 
     public void init(int id, long heartbeatInterval,
-                     List<ContainerSimulator> containerList, ResourceManager rm, YarnClient yarnClient, SLSSimpleRunner se,
+                     List<ContainerSimulator> containerList, ResourceManager rm, YarnClient yarnClient, FairScheduler fs, SLSSimpleRunner se,
                      long traceSubmitTime, long traceStartTime, long traceFinishTime, String user, String queue, int jobGpu,
                      boolean isTracked, String oldAppId) {
-        super.init(id, heartbeatInterval, containerList, rm, yarnClient, se,
+        super.init(id, heartbeatInterval, containerList, rm, yarnClient, fs, se,
                 traceSubmitTime, traceStartTime, traceFinishTime, user, queue, jobGpu,
                 isTracked, oldAppId);
         amtype = "philly";

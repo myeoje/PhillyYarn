@@ -202,6 +202,21 @@ public class SLSSimpleRunner {
         rm.init(rmConf);
         rm.start();
 
+        if (isSimpleRMMode())
+        {
+            // wencong: I try to have a *simple version RM* which don't support fault tolerance and don't have multi-threading,
+            // while we asume that there is no overhead handling the RM work items. Therefore the time line of RM is fully control by SLS.
+            fs = new FairScheduler();
+            try {
+                fs.getQueueManager().initialize(rmConf);
+                fs.setRMContext(rm.getRMContext());
+            }
+            catch (Exception e)
+            {
+                LOG.error("fair scheduler init failed");
+            }
+        }
+
         // Wencong: add YarnClient for getNodeReports
         yarnClient = YarnClient.createYarnClient();
         yarnClient.init(rmConf);
@@ -241,7 +256,7 @@ public class SLSSimpleRunner {
 
             NMSimpleSimulator nm = new NMSimpleSimulator();
             nm.init(hostName, nmMemoryMB, nmVCores,
-                    random.nextInt(heartbeatInterval), heartbeatInterval, rm);
+                    random.nextInt(heartbeatInterval), heartbeatInterval, rm, fs);
             simpleTimer.scheduleNM(nm);
             nmMap.put(nm.getNode().getNodeID(), nm);
             //runner.schedule(nm);
@@ -376,7 +391,7 @@ public class SLSSimpleRunner {
                         AMSimpleSimulator amSim = (AMSimpleSimulator) ReflectionUtils.newInstance(
                                 Class.forName("org.apache.hadoop.yarn.sls.appmaster.PhillyAMSimpleSimulator"), new Configuration());
                         if (amSim != null) {
-                            amSim.init(AM_ID++, heartbeatInterval, containerList, rm, yarnClient,
+                            amSim.init(AM_ID++, heartbeatInterval, containerList, rm, yarnClient, fs,
                                     this, jobSubmitTime, jobStartTime, jobFinishTime, user, queue, jobGpu,
                                     isTracked, oldAppId);
                             simpleTimer.scheduleAM(amSim);
