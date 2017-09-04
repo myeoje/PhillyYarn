@@ -50,6 +50,7 @@ import org.apache.hadoop.yarn.server.api.records.NodeStatus;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
+import org.apache.hadoop.yarn.sls.SLSRunner;
 import org.apache.hadoop.yarn.util.Records;
 import org.apache.log4j.Logger;
 
@@ -79,8 +80,8 @@ public class NMSimulator extends TaskRunner.Task {
   public void init(String nodeIdStr, int memory, int cores,
           int dispatchTime, int heartBeatInterval, ResourceManager rm)
           throws IOException, YarnException {
-    super.init(dispatchTime, dispatchTime + 1000000L * heartBeatInterval,
-            heartBeatInterval);
+    //super.init(dispatchTime, dispatchTime + 1000000L * heartBeatInterval, heartBeatInterval);
+    super.init(dispatchTime, dispatchTime + SLSRunner.MaxSimulateTime(), heartBeatInterval);
     // create resource
     String rackHostName[] = SLSUtils.getRackHostName(nodeIdStr);
     this.node = NodeInfo.newNodeInfo(rackHostName[0], rackHostName[1], 
@@ -244,7 +245,27 @@ public class NMSimulator extends TaskRunner.Task {
       }
     }
   }
+  public void deleteContainer(Container container) {
+    // wencong:
+    // we can only delete the container with max_long as lifeTimeMS,
+    // which means the container is just used for reservation and never completed.
+    ContainerSimulator cont = runningContainers.get(container.getId());
+    containerQueue.remove(cont);
+    runningContainers.remove(container.getId());
+  }
+  public void relaunchContainer(Container container, long lifeTimeMS, long currentTimeMS) {
+    // this function is for normal container, not AM container
+    assert(lifeTimeMS != -1);
 
+    LOG.debug(MessageFormat.format("NodeManager {0} relaunches the " +
+            "container ({1}).", node.getNodeID(), container.getId()));
+    deleteContainer(container);
+    ContainerSimulator cs = new ContainerSimulator(container.getId(),
+            container.getResource(), lifeTimeMS + currentTimeMS,
+            lifeTimeMS);
+    containerQueue.add(cs);
+    runningContainers.put(cs.getId(), cs);
+  }
   /**
    * clean up an AM container and add to completed list
    * @param containerId id of the container to be cleaned

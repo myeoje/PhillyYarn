@@ -56,6 +56,7 @@ import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.client.api.YarnClient;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
@@ -79,6 +80,8 @@ import org.apache.hadoop.yarn.sls.utils.SLSUtils;
 public abstract class AMSimulator extends TaskRunner.Task {
   // resource manager
   protected ResourceManager rm;
+  // yarnClient to get resource type
+  protected YarnClient yarnClient;
   // main
   protected SLSRunner se;
   // application
@@ -95,6 +98,8 @@ public abstract class AMSimulator extends TaskRunner.Task {
   protected String user;  
   // queue name
   protected String queue;
+  // jobGpu number:  for philly
+  protected int jobGpu;
   // am type
   protected String amtype;
   // job start/end time
@@ -114,6 +119,9 @@ public abstract class AMSimulator extends TaskRunner.Task {
     this.responseQueue = new LinkedBlockingQueue<AllocateResponse>();
   }
 
+  /*
+  For MR job
+   */
   public void init(int id, int heartbeatInterval, 
       List<ContainerSimulator> containerList, ResourceManager rm, SLSRunner se,
       long traceStartTime, long traceFinishTime, String user, String queue, 
@@ -129,6 +137,29 @@ public abstract class AMSimulator extends TaskRunner.Task {
     this.isTracked = isTracked;
     this.traceStartTimeMS = traceStartTime;
     this.traceFinishTimeMS = traceFinishTime;
+  }
+
+  /*
+  for philly AM
+   */
+  public void init(int id, long heartbeatInterval,
+                   List<ContainerSimulator> containerList, ResourceManager rm, YarnClient yarnClient, SLSRunner se,
+                   long traceSubmitTime, long traceStartTime, long traceFinishTime, String user, String queue, int jobGpu,
+                   boolean isTracked, String oldAppId) {
+    // TODO: the endtime may not be big enough for longer trace
+    super.init(traceStartTime, traceStartTime + 1000000L * heartbeatInterval,
+            heartbeatInterval);
+    this.user = user;
+    this.rm = rm;
+    this.yarnClient = yarnClient;
+    this.se = se;
+    this.user = user;
+    this.queue = queue;
+    this.oldAppId = oldAppId;
+    this.isTracked = isTracked;
+    this.traceStartTimeMS = traceStartTime;
+    this.traceFinishTimeMS = traceFinishTime;
+    this.jobGpu = jobGpu;
   }
 
   /**
@@ -151,14 +182,19 @@ public abstract class AMSimulator extends TaskRunner.Task {
 
   @Override
   public void middleStep() throws Exception {
+    long currentTimeMS = SLSRunner.NOW();
+    //LOG.info(MessageFormat.format("middle step: {0}", currentTimeMS - SLSRunner.getRunner().getStartTimeMS()));
+
     // process responses in the queue
-    processResponseQueue();
+    processResponseQueue(currentTimeMS);
     
     // send out request
-    sendContainerRequest();
+    sendContainerRequest(currentTimeMS);
     
     // check whether finish
-    checkStop();
+    checkStop(currentTimeMS);
+
+    checkTimeOut(currentTimeMS);
   }
 
   @Override
@@ -223,11 +259,14 @@ public abstract class AMSimulator extends TaskRunner.Task {
     return createAllocateRequest(ask, new ArrayList<ContainerId>());
   }
 
-  protected abstract void processResponseQueue() throws Exception;
+  protected void checkTimeOut(long currentTimeMS) throws Exception{
+    return;
+  }
+  protected abstract void processResponseQueue(long currentTimeMS) throws Exception;
   
-  protected abstract void sendContainerRequest() throws Exception;
+  protected abstract void sendContainerRequest(long currentTimeMS) throws Exception;
   
-  protected abstract void checkStop();
+  protected abstract void checkStop(long currentTimeMS);
   
   private void submitApp()
           throws YarnException, InterruptedException, IOException {
@@ -368,6 +407,52 @@ public abstract class AMSimulator extends TaskRunner.Task {
     if (anyRequest != null) {
       ask.add(anyRequest);
     }
+    return ask;
+  }
+
+  protected List<ResourceRequest> cancelRequests(
+          List<ContainerSimulator> csList, int priority) {
+    // create requests
+    Map<String, ResourceRequest> rackLocalRequestMap = new HashMap<String, ResourceRequest>();
+    Map<String, ResourceRequest> nodeLocalRequestMap = new HashMap<String, ResourceRequest>();
+    ResourceRequest anyRequest = null;
+    for (ContainerSimulator cs : csList) {
+      String rackHostNames[] = SLSUtils.getRackHostName(cs.getHostname());
+      // check rack local
+      String rackname = rackHostNames[0];
+      if (rackLocalRequestMap.containsKey(rackname)) {
+        rackLocalRequestMap.get(rackname).setNumContainers(
+                rackLocalRequestMap.get(rackname).getNumContainers() - 1);
+      } else {
+        ResourceRequest request = createResourceRequest(
+                cs.getResource(), rackname, priority, -1);
+        rackLocalRequestMap.put(rackname, request);
+      }
+      // check node local
+      String hostname = rackHostNames[1];
+      if (nodeLocalRequestMap.containsKey(hostname)) {
+        nodeLocalRequestMap.get(hostname).setNumContainers(
+                nodeLocalRequestMap.get(hostname).getNumContainers() - 1);
+      } else {
+        ResourceRequest request = createResourceRequest(
+                cs.getResource(), hostname, priority, -1);
+        nodeLocalRequestMap.put(hostname, request);
+      }
+      // any
+      if (anyRequest == null) {
+        anyRequest = createResourceRequest(
+                cs.getResource(), ResourceRequest.ANY, priority, -1);
+      } else {
+        anyRequest.setNumContainers(anyRequest.getNumContainers() - 1);
+      }
+    }
+    List<ResourceRequest> ask = new ArrayList<ResourceRequest>();
+    ask.addAll(nodeLocalRequestMap.values());
+    ask.addAll(rackLocalRequestMap.values());
+    if (anyRequest != null) {
+      ask.add(anyRequest);
+    }
+    LOG.debug(MessageFormat.format("Application {0} is sending resource request: {1}",appId,  ask));
     return ask;
   }
 

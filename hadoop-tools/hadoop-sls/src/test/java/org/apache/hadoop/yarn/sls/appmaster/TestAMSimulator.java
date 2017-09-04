@@ -50,17 +50,17 @@ public class TestAMSimulator {
 
   class MockAMSimulator extends AMSimulator {
     @Override
-    protected void processResponseQueue()
+    protected void processResponseQueue(long currentTimeMS)
         throws InterruptedException, YarnException, IOException {
     }
 
     @Override
-    protected void sendContainerRequest()
+    protected void sendContainerRequest(long currentTimeMS)
         throws YarnException, IOException, InterruptedException {
     }
 
     @Override
-    protected void checkStop() {
+    protected void checkStop(long currentTimeMS) {
     }
   }
 

@@ -46,12 +46,16 @@ public class TestSLSRunner {
     // start the simulator
     File slsOutputDir = new File(tempDir.getAbsolutePath() + "/slsoutput/");
     String args[] = new String[]{
-            "-inputrumen", "src/main/data/2jobs2min-rumen-jh.json",
-            "-output", slsOutputDir.getAbsolutePath()};
+            //"-inputrumen", "src/main/data/2jobs2min-rumen-jh.json",
+            //"-inputsls", "src/main/data/mr-sls-jobs.json",
+            "-inputsls", "src/main/data/philly-sls-jobs.json",
+            //"-nodes", "src/main/data/sls-nodes.json",
+            "-nodes", "src/main/data/less-sls-nodes.json",
+            "-output", "src/main/data/"};
     SLSRunner.main(args);
 
     // wait for 20 seconds before stop
-    int count = 20;
+    int count = 50;
     while (count >= 0) {
       Thread.sleep(1000);
 

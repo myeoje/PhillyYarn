@@ -186,7 +186,7 @@ public class MRAMSimulator extends AMSimulator {
 
   @Override
   @SuppressWarnings("unchecked")
-  protected void processResponseQueue()
+  protected void processResponseQueue(long currentTimeMS)
           throws InterruptedException, YarnException, IOException {
     // Check whether receive the am container
     if (!isAMContainerRunning) {
@@ -311,7 +311,7 @@ public class MRAMSimulator extends AMSimulator {
   }
 
   @Override
-  protected void sendContainerRequest()
+  protected void sendContainerRequest(long currentTimeMS)
           throws YarnException, IOException, InterruptedException {
     if (isFinished) {
       return;
@@ -385,7 +385,7 @@ public class MRAMSimulator extends AMSimulator {
   }
 
   @Override
-  protected void checkStop() {
+  protected void checkStop(long currentTimeMS) {
     if (isFinished) {
       super.setEndTime(System.currentTimeMillis());
     }

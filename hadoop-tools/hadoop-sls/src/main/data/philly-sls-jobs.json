@@ -1,0 +1,10 @@
+{
+  "am.type" : "philly",
+  "job.submit.ms" : 1000,
+  "job.start.ms" : 7000,
+  "job.end.ms" : 17375,
+  "job.queue.name" : "pnrsy.parallel",
+  "job.id" : "job_1369942127770_1205",
+  "job.user" : "jenkins",
+  "job.gpu" : "4"
+}

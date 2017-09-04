@@ -1,0 +1,17 @@
+{
+  "am.type" : "mapreduce",
+  "job.submit.ms" : 1000,
+  "job.start.ms" : 7000,
+  "job.end.ms" : 17375,
+  "job.queue.name" : "sls_queue_1",
+  "job.id" : "job_1369942127770_1205",
+  "job.user" : "jenkins",
+  "job.gpu" : "4",
+  "job.tasks" : [ {
+  		"container.host" : "/default-rack/a2115.smile.com",
+  		"container.priority" : 20,
+  		"container.type" : "map",
+  		"container.start.ms" : 8000,
+  		"container.end.ms" : 13000
+  	} ]
+}
