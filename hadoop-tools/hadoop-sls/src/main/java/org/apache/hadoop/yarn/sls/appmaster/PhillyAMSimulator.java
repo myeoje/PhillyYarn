@@ -69,19 +69,22 @@ public class PhillyAMSimulator extends AMSimulator {
     private static final int PRIORITY_AM = 1;
     private static final int PRIORITY_GPU = 20;
 
-    // pending maps
+    // pending Gpu containers
+    // not even send out the resource request
     private LinkedList<ContainerSimulator> pendingGpuContainers =
             new LinkedList<ContainerSimulator>();
 
     // pending failed maps
+    // useless now
     private LinkedList<ContainerSimulator> pendingFailedGpuContainers =
             new LinkedList<ContainerSimulator>();
 
-    // scheduled maps
+    // scheduled Gpu container
+    //
     private LinkedList<ContainerSimulator> scheduledGpuContainers =
             new LinkedList<ContainerSimulator>();
 
-    // assigned maps
+    // assigned Gpu containers
     private Map<ContainerId, ContainerSimulator> assignedGpuContainers =
             new HashMap<ContainerId, ContainerSimulator>();
 
@@ -103,6 +106,7 @@ public class PhillyAMSimulator extends AMSimulator {
     // finished
     private boolean isFinished = false;
     // timeout
+    private boolean alreadySetTimeout = false;
     private boolean enableAllocatingTimeout = false;
     private boolean enableYieldingTimeout = false;
     private long allocateTime, yieldTime;
@@ -144,6 +148,7 @@ public class PhillyAMSimulator extends AMSimulator {
         //totalContainers = pendingGpuContainers.size();
 
         // timeout
+        alreadySetTimeout = false;
         enableAllocatingTimeout = false;
         enableYieldingTimeout = false;
 
@@ -196,6 +201,7 @@ public class PhillyAMSimulator extends AMSimulator {
     @Override
     protected void checkTimeOut(long currentTimeMS)
             throws InterruptedException, YarnException, IOException {
+        if (isFinished) return;
         if (enableAllocatingTimeout && (currentTimeMS - allocateTime > allocateTimeout)) {
             if (assignedGpuContainers.size() != totalContainers) {
 
@@ -204,7 +210,8 @@ public class PhillyAMSimulator extends AMSimulator {
                 // cancel scheduled request
 
                 String host = "/" + connectivityDomain + "/" + nodeList;
-                List<ResourceRequest> cancelAsk = cancelRequests(scheduledGpuContainers, PRIORITY_GPU);
+                List<ResourceRequest> cancelAsk = null;
+                //List<ResourceRequest> cancelAsk = cancelRequests(scheduledGpuContainers, PRIORITY_GPU);
                 if (cancelAsk == null)
                 {
                     cancelAsk = new ArrayList<ResourceRequest>();
@@ -220,6 +227,7 @@ public class PhillyAMSimulator extends AMSimulator {
                 // use AM-RM protocol for allocation
                 // leave the allocate list empty to upate the request for RM
                 final AllocateRequest releaseRequest = createAllocateRequest(cancelAsk, releaseContainer);
+                LOG.debug(MessageFormat.format("release request: {0}", releaseRequest));
                 UserGroupInformation ugi =
                         UserGroupInformation.createRemoteUser(appAttemptId.toString());
                 Token<AMRMTokenIdentifier> token = rm.getRMContext().getRMApps()
@@ -237,7 +245,6 @@ public class PhillyAMSimulator extends AMSimulator {
                     responseQueue.put(response);
                 }
 
-
                 // clean
                 finishedContainers = 0;
                 totalContainers = 0;
@@ -246,7 +253,7 @@ public class PhillyAMSimulator extends AMSimulator {
                 pendingGpuContainers.clear();
                 pendingFailedGpuContainers.clear();
                 scheduledGpuContainers.clear();
-                assignedGpuContainers.clear();
+                //assignedGpuContainers.clear();
                 allocatedContainer.clear();
 
                 // set yield timeout
@@ -255,7 +262,8 @@ public class PhillyAMSimulator extends AMSimulator {
                 yieldTimeout = phillyAM.getYieldingTimeout();
                 yieldTime = currentTimeMS;
 
-                LOG.debug(MessageFormat.format("Application {0} allocating resource timeout for {1}. It should release all resource and yield for {2}.", appId, allocateTimeout, yieldTimeout));
+                LOG.debug(MessageFormat.format("Application {0} allocating resource timeout for {1}. " +
+                        "It should release all resource and yield for {2}.", appId, allocateTimeout, yieldTimeout));
             }
         }
         else if (enableYieldingTimeout && (currentTimeMS - yieldTime > yieldTimeout)) {
@@ -269,7 +277,7 @@ public class PhillyAMSimulator extends AMSimulator {
 
             // set allocating timeout
             enableYieldingTimeout = false;
-
+            alreadySetTimeout = false;
         }
     }
 
@@ -311,15 +319,14 @@ public class PhillyAMSimulator extends AMSimulator {
                     ContainerId containerId = cs.getContainerId();
                     if (cs.getExitStatus() == ContainerExitStatus.SUCCESS) {
                         if (assignedGpuContainers.containsKey(containerId)) {
-                            LOG.debug(MessageFormat.format("Application {0} has one" +
-                                    "gpu work finished ({1}).", appId, containerId));
+                            LOG.debug(MessageFormat.format("Application {0} has 1 " +
+                                    "gpu work finished: ({1}).", appId, containerId));
                             assignedGpuContainers.remove(containerId);
                             finishedContainers ++;
                         } else {
                             // am container released event
                             isFinished = true;
-                            LOG.info(MessageFormat.format("Application {0} goes to " +
-                                    "finish.", appId));
+                            LOG.info(MessageFormat.format("Application {0} goes to finish.", appId));
                         }
                     } else {
                         // Wencong: currently ignore all killed; restart AM will trigger some bugs.
@@ -347,7 +354,7 @@ public class PhillyAMSimulator extends AMSimulator {
                 isAMContainerRunning = false;
                 LOG.debug(MessageFormat.format("Application {0} sends out event " +
                         "to clean up its AM container.", appId));
-                isFinished = true;
+                //isFinished = true;
                 break;
             }
 
@@ -376,6 +383,17 @@ public class PhillyAMSimulator extends AMSimulator {
                                     .relaunchContainer(cc, cs.getLifeTime(), SLSRunner.NOW());
                         }
                     }
+
+                    // set allocate timeout
+                    /*
+                    if (!alreadySetTimeout) {
+                        alreadySetTimeout = true;
+                        enableAllocatingTimeout = true;
+                        allocateTimeout = phillyAM.getAllocatingTimeout();
+                        LOG.debug(MessageFormat.format("Application {0} sets an allocating resource timeout: {1}.", appId, allocateTimeout));
+                        allocateTime = currentTimeMS;
+                    }
+                    */
                 }
             }
         }
@@ -424,57 +442,44 @@ public class PhillyAMSimulator extends AMSimulator {
 
                 needResourceallocation = false;
 
-                boolean testYarnClient = false;
-                if (testYarnClient) {
-                    List<NodeReport> nodeRep = yarnClient.getNodeReports();
-                    System.out.println(nodeRep.toString());
-                    finishedContainers = totalContainers;
+                // choose rack-level preference
+                TopologyAwareNodeAllocator.NodeGroup nodeGroup = phillyAM.getBestNodes(new ContainerResourceDescriptor("anyConnected", "", 0, 0, 4, false));
+                connectivityDomain = nodeGroup.getConnectivityDomain();
+                nodeList = strJoin(nodeGroup.getNodeArray(), ",");
+
+                // determine container number
+                pendingGpuContainers.clear();
+                allGpus.clear();
+                //assert (jobGpu % gpuPerContainer == 0);
+                if (!SLSRunner.UnitTest()){
+                    gpuPerContainer = nodeGroup.getNumGpusPerContainer();
+                    if (jobGpu < gpuPerContainer){
+                        gpuPerContainer = jobGpu;
+                    }
                 }
-                else {
-                    // choose rack-level preference
-                    TopologyAwareNodeAllocator.NodeGroup nodeGroup = phillyAM.getBestNodes(new ContainerResourceDescriptor("anyConnected", "", 0, 0, 4, false));
-                    connectivityDomain = nodeGroup.getConnectivityDomain();
-                    nodeList = strJoin(nodeGroup.getNodeArray(), ",");
-
-                    // determine container number
-                    pendingGpuContainers.clear();
-                    allGpus.clear();
-                    //assert (jobGpu % gpuPerContainer == 0);
-                    if (!SLSRunner.UnitTest()){
-                        gpuPerContainer = nodeGroup.getNumGpusPerContainer();
-                        if (jobGpu < gpuPerContainer){
-                            gpuPerContainer = jobGpu;
-                        }
-                    }
-                    int containerNum = jobGpu / gpuPerContainer;
-                    if (jobGpu % gpuPerContainer != 0) {
-                        containerNum++;
-                    }
-
-                    for (int i = 0; i < containerNum; i++) {
-                        final int gpuNumber = gpuPerContainer;
-                        final int gpuToMem = 100 * 1024;
-                        //final int gpuToMem = 1024;
-                        String host = "/" + connectivityDomain + "/" + nodeList;
-                        pendingGpuContainers.add(new ContainerSimulator(Resource.newInstance(gpuNumber * gpuToMem, gpuNumber),
-                                traceFinishTimeMS - traceStartTimeMS, host, PRIORITY_GPU, "gpu"));
-                    }
-                    allGpus.addAll(pendingGpuContainers);
-                    totalContainers = pendingGpuContainers.size();
-
-
-                    ask = packageRequests(pendingGpuContainers, PRIORITY_GPU);
-                    LOG.debug(MessageFormat.format("Application {0} sends out request for {1} gpu workers."
-                            , appId, pendingGpuContainers.size()));
-                    scheduledGpuContainers.addAll(pendingGpuContainers);
-                    pendingGpuContainers.clear();
-
-                    // set allocate timeout
-                    enableAllocatingTimeout = true;
-                    allocateTimeout = phillyAM.getAllocatingTimeout();
-                    LOG.debug(MessageFormat.format("Application {0} sets an allocating resource timeout: {1}.", appId, allocateTimeout));
-                    allocateTime = currentTimeMS;
+                int containerNum = jobGpu / gpuPerContainer;
+                if (jobGpu % gpuPerContainer != 0) {
+                    containerNum++;
                 }
+
+                for (int i = 0; i < containerNum; i++) {
+                    final int gpuNumber = gpuPerContainer;
+                    final int gpuToMem = 100 * 1024;
+                    //final int gpuToMem = 1024;
+                    String host = "/" + connectivityDomain + "/" + nodeList;
+                    pendingGpuContainers.add(new ContainerSimulator(Resource.newInstance(gpuNumber * gpuToMem, gpuNumber),
+                            traceFinishTimeMS - traceStartTimeMS, host, PRIORITY_GPU, "gpu"));
+                }
+                allGpus.addAll(pendingGpuContainers);
+                totalContainers = pendingGpuContainers.size();
+
+
+                ask = packageRequests(pendingGpuContainers, PRIORITY_GPU);
+                LOG.debug(MessageFormat.format("Application {0} sends out request for {1} gpu workers."
+                        , appId, pendingGpuContainers.size()));
+                scheduledGpuContainers.addAll(pendingGpuContainers);
+                pendingGpuContainers.clear();
+
             } else if (! pendingFailedGpuContainers.isEmpty() && scheduledGpuContainers.isEmpty()) {
                 // Wencong: should never go into this branch
                 assert(false);

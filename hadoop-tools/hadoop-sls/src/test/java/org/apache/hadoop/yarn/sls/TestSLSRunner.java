@@ -55,7 +55,7 @@ public class TestSLSRunner {
     SLSRunner.main(args);
 
     // wait for 20 seconds before stop
-    int count = 50;
+    int count = 200;
     while (count >= 0) {
       Thread.sleep(1000);
 

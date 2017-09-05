@@ -18,16 +18,16 @@ public class PhillyAMWrapper {
     public final Logger LOG = Logger.getLogger(PhillyAMWrapper.class);
 
     /** Sets the min timeout for containers in Allocating state */
-    final static int MinAllocationTimeoutSeconds = 120;
+    final static int MinAllocationTimeoutSeconds = 5;//120;
 
     /** Sets the max timeout for containers in Allocating state */
-    final static int MaxAllocationTimeoutSeconds = 180;
+    final static int MaxAllocationTimeoutSeconds = 8;//180;
 
     /** Sets the min time to spend in Yield state (between allocation attempts) */
-    final static int MinYieldTimeSeconds = 150;
+    final static int MinYieldTimeSeconds = 1;//150;
 
     /** Sets the max time to spend in Yield state (between allocation attempts) */
-    final static int MaxYieldTimeSeconds = 200;
+    final static int MaxYieldTimeSeconds = 2;//200;
 
     private Random random;
 
