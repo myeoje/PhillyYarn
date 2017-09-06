@@ -47,6 +47,9 @@
   </property>
   <property>
     <name>yarn.sls.am.type.philly</name>
+    <!--
+    <value>org.apache.hadoop.yarn.sls.appmaster.PhillyAMSimpleSimulator</value>
+    -->
     <value>org.apache.hadoop.yarn.sls.appmaster.PhillyAMSimulator</value>
   </property>
 

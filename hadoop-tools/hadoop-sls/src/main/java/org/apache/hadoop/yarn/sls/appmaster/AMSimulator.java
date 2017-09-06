@@ -29,8 +29,10 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import com.microsoft.philly.appmaster.TopologyAwareNodeAllocator;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
@@ -56,7 +58,9 @@ import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.client.api.AMRMClient;
 import org.apache.hadoop.yarn.client.api.YarnClient;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
@@ -66,6 +70,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptState;
+import org.apache.hadoop.yarn.sls.conf.SLSConfiguration;
 import org.apache.hadoop.yarn.util.Records;
 import org.apache.log4j.Logger;
 
@@ -112,6 +117,9 @@ public abstract class AMSimulator extends TaskRunner.Task {
   // progress
   protected int totalContainers;
   protected int finishedContainers;
+
+  // AMRMClient
+  protected AMRMClient<AMRMClient.ContainerRequest> amrmClient;
   
   protected final Logger LOG = Logger.getLogger(AMSimulator.class);
   
@@ -195,6 +203,26 @@ public abstract class AMSimulator extends TaskRunner.Task {
     checkStop(currentTimeMS);
 
     checkTimeOut(currentTimeMS);
+
+    /*
+    // AM-RM heartbeat
+    UserGroupInformation ugi =
+            UserGroupInformation.createRemoteUser(appAttemptId.toString());
+    Token<AMRMTokenIdentifier> token = rm.getRMContext().getRMApps()
+            .get(appAttemptId.getApplicationId())
+            .getRMAppAttempt(appAttemptId).getAMRMToken();
+    ugi.addTokenIdentifier(token.decodeIdentifier());
+    AllocateResponse response = ugi.doAs(
+            new PrivilegedExceptionAction<AllocateResponse>() {
+              @Override
+              public AllocateResponse run() throws Exception {
+                return amrmClient.allocate(0.1f);
+              }
+            });
+    if (response != null) {
+      responseQueue.put(response);
+    }
+    */
   }
 
   @Override
@@ -204,6 +232,11 @@ public abstract class AMSimulator extends TaskRunner.Task {
     if (isTracked) {
       untrackApp();
     }
+
+    // wencong:
+    // use amrmClient to unregister
+
+
     // unregister application master
     final FinishApplicationMasterRequest finishAMRequest = recordFactory
                   .newRecordInstance(FinishApplicationMasterRequest.class);
@@ -230,6 +263,25 @@ public abstract class AMSimulator extends TaskRunner.Task {
          .addAMRuntime(appId, 
                       traceStartTimeMS, traceFinishTimeMS, 
                       simulateStartTimeMS, simulateFinishTimeMS);
+  }
+
+  private AMRMClient.ContainerRequest createContainerAsk(Resource res, TopologyAwareNodeAllocator.NodeGroup nodeGroup){
+    return new AMRMClient.ContainerRequest(
+            res,
+            nodeGroup.getNodeArray(),
+            null,
+            Priority.newInstance(0),
+            false);
+  }
+
+  protected void addContainerRequest(Resource res, TopologyAwareNodeAllocator.NodeGroup nodeGroup) {
+    amrmClient.addContainerRequest(createContainerAsk(res, nodeGroup));
+  }
+  protected void removeContainerRequest(Resource res, TopologyAwareNodeAllocator.NodeGroup nodeGroup) {
+    amrmClient.removeContainerRequest(createContainerAsk(res, nodeGroup));
+  }
+  protected void releaseAssignedContainer(ContainerId id) {
+    amrmClient.releaseAssignedContainer(id);
   }
   
   protected ResourceRequest createResourceRequest(
@@ -326,6 +378,43 @@ public abstract class AMSimulator extends TaskRunner.Task {
 
   private void registerAM()
           throws YarnException, IOException, InterruptedException {
+    // wencong:
+    // try to use AMRMClient for communication
+    /*
+    Configuration rmConf = new YarnConfiguration();
+    String schedulerClass = rmConf.get(YarnConfiguration.RM_SCHEDULER);
+    rmConf.set(SLSConfiguration.RM_SCHEDULER, schedulerClass);
+    rmConf.set(YarnConfiguration.RM_SCHEDULER,
+            ResourceSchedulerWrapper.class.getName());
+
+    amrmClient = AMRMClient.createAMRMClient();
+    amrmClient.init(rmConf);
+    amrmClient.start();
+
+    final RegisterApplicationMasterRequest amRegisterRequest =
+            Records.newRecord(RegisterApplicationMasterRequest.class);
+    amRegisterRequest.setHost("localhost");
+    amRegisterRequest.setRpcPort(1000);
+    amRegisterRequest.setTrackingUrl("localhost:1000");
+
+    UserGroupInformation ugi =
+            UserGroupInformation.createRemoteUser(appAttemptId.toString());
+    Token<AMRMTokenIdentifier> token = rm.getRMContext().getRMApps().get(appId)
+            .getRMAppAttempt(appAttemptId).getAMRMToken();
+    ugi.addTokenIdentifier(token.decodeIdentifier());
+
+    ugi.doAs(
+            new PrivilegedExceptionAction<RegisterApplicationMasterResponse>() {
+              @Override
+              public RegisterApplicationMasterResponse run() throws Exception {
+                //return amrmClient.registerApplicationMaster("localhost",1000, "localhost:1000");
+                return rm.getApplicationMasterService()
+                        .registerApplicationMaster(amRegisterRequest);
+              }
+            });
+*/
+
+
     // register application master
     final RegisterApplicationMasterRequest amRegisterRequest =
             Records.newRecord(RegisterApplicationMasterRequest.class);
@@ -375,6 +464,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
       String rackHostNames[] = SLSUtils.getRackHostName(cs.getHostname());
       // check rack local
       String rackname = rackHostNames[0];
+
       if (rackLocalRequestMap.containsKey(rackname)) {
         rackLocalRequestMap.get(rackname).setNumContainers(
             rackLocalRequestMap.get(rackname).getNumContainers() + 1);
@@ -394,12 +484,14 @@ public abstract class AMSimulator extends TaskRunner.Task {
         nodeLocalRequestMap.put(hostname, request);
       }
       // any
+
       if (anyRequest == null) {
         anyRequest = createResourceRequest(
                 cs.getResource(), ResourceRequest.ANY, priority, 1);
       } else {
         anyRequest.setNumContainers(anyRequest.getNumContainers() + 1);
       }
+
     }
     List<ResourceRequest> ask = new ArrayList<ResourceRequest>();
     ask.addAll(nodeLocalRequestMap.values());
@@ -420,31 +512,35 @@ public abstract class AMSimulator extends TaskRunner.Task {
       String rackHostNames[] = SLSUtils.getRackHostName(cs.getHostname());
       // check rack local
       String rackname = rackHostNames[0];
+
       if (rackLocalRequestMap.containsKey(rackname)) {
         rackLocalRequestMap.get(rackname).setNumContainers(
-                rackLocalRequestMap.get(rackname).getNumContainers() - 1);
+                rackLocalRequestMap.get(rackname).getNumContainers());
       } else {
         ResourceRequest request = createResourceRequest(
-                cs.getResource(), rackname, priority, -1);
+                cs.getResource(), rackname, priority, 0);
         rackLocalRequestMap.put(rackname, request);
       }
+
       // check node local
       String hostname = rackHostNames[1];
       if (nodeLocalRequestMap.containsKey(hostname)) {
         nodeLocalRequestMap.get(hostname).setNumContainers(
-                nodeLocalRequestMap.get(hostname).getNumContainers() - 1);
+                nodeLocalRequestMap.get(hostname).getNumContainers());
       } else {
         ResourceRequest request = createResourceRequest(
-                cs.getResource(), hostname, priority, -1);
+                cs.getResource(), hostname, priority, 0);
         nodeLocalRequestMap.put(hostname, request);
       }
       // any
+
       if (anyRequest == null) {
         anyRequest = createResourceRequest(
-                cs.getResource(), ResourceRequest.ANY, priority, -1);
+                cs.getResource(), ResourceRequest.ANY, priority, 0);
       } else {
-        anyRequest.setNumContainers(anyRequest.getNumContainers() - 1);
+        anyRequest.setNumContainers(anyRequest.getNumContainers());
       }
+
     }
     List<ResourceRequest> ask = new ArrayList<ResourceRequest>();
     ask.addAll(nodeLocalRequestMap.values());

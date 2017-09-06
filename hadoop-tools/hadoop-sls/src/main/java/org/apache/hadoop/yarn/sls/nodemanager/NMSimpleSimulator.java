@@ -1,0 +1,347 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.hadoop.yarn.sls.nodemanager;
+
+import java.io.IOException;
+import java.text.MessageFormat;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.DelayQueue;
+
+import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.classification.InterfaceAudience.Private;
+import org.apache.hadoop.classification.InterfaceStability.Unstable;
+import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.Container;
+import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
+import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.ContainerState;
+import org.apache.hadoop.yarn.api.records.ContainerStatus;
+import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords
+        .RegisterNodeManagerRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords
+        .RegisterNodeManagerResponse;
+import org.apache.hadoop.yarn.server.api.records.MasterKey;
+import org.apache.hadoop.yarn.server.api.records.NodeAction;
+import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
+import org.apache.hadoop.yarn.server.api.records.NodeStatus;
+import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeAddedSchedulerEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
+import org.apache.hadoop.yarn.server.utils.BuilderUtils;
+import org.apache.hadoop.yarn.sls.SLSSimpleRunner;
+import org.apache.hadoop.yarn.sls.scheduler.ContainerSimpleSimulator;
+import org.apache.hadoop.yarn.sls.scheduler.SimpleTimer;
+import org.apache.hadoop.yarn.util.Records;
+import org.apache.log4j.Logger;
+
+import org.apache.hadoop.yarn.sls.utils.SLSUtils;
+
+@Private
+@Unstable
+public class NMSimpleSimulator{
+    // node resource
+    private RMNode node;
+    // master key
+    private MasterKey masterKey;
+    // containers with various STATE
+    private List<ContainerId> completedContainerList;
+    private List<ContainerId> releasedContainerList;
+    private Map<ContainerId, ContainerSimpleSimulator> runningContainers;
+    private List<ContainerId> amContainerList;
+    // resource manager
+    private ResourceManager rm;
+    private FairScheduler fs;
+    // heart beat response id
+    private int RESPONSE_ID = 1;
+    private final static Logger LOG = Logger.getLogger(NMSimpleSimulator.class);
+    private long heartBeatInterval;
+    private long dispatchTime;
+    private boolean isRunning;
+    public void init(String nodeIdStr, int memory, int cores,
+                     long dispatchTime, long heartBeatInterval, ResourceManager rm, FairScheduler fs)
+            throws IOException, YarnException {
+        //super.init(dispatchTime, dispatchTime + 1000000L * heartBeatInterval, heartBeatInterval);
+        // 3 month
+        //super.init(dispatchTime, dispatchTime + 3 * 31 * 24 * 60 * 60 * heartBeatInterval, heartBeatInterval);
+
+        this.heartBeatInterval = heartBeatInterval;
+        this.dispatchTime = dispatchTime;
+        isRunning = false;
+        // create resource
+        String rackHostName[] = SLSUtils.getRackHostName(nodeIdStr);
+        this.node = NodeInfo.newNodeInfo(rackHostName[0], rackHostName[1],
+                BuilderUtils.newResource(memory, cores));
+        this.rm = rm;
+        this.fs = fs;
+        // init data structures
+        completedContainerList = new ArrayList<ContainerId>();
+        releasedContainerList = new ArrayList<ContainerId>();
+        amContainerList = new ArrayList<ContainerId>();
+        runningContainers =
+                new ConcurrentHashMap<ContainerId, ContainerSimpleSimulator>();
+
+        //if(SLSSimpleRunner.isSimpleRMMode()) {
+        //    NodeAddedSchedulerEvent nodeEvent = new NodeAddedSchedulerEvent(node);
+        //    fs.handle(nodeEvent);
+        //}
+        //else {
+        //    // register NM with RM
+        //    RegisterNodeManagerRequest req =
+        //            Records.newRecord(RegisterNodeManagerRequest.class);
+        //    req.setNodeId(node.getNodeID());
+        //    req.setResource(node.getTotalCapability());
+        //    req.setHttpPort(80);
+        //    RegisterNodeManagerResponse response = rm.getResourceTrackerService()
+        //            .registerNodeManager(req);
+        //    masterKey = response.getNMTokenMasterKey();
+        //}
+
+        // register NM with RM
+        RegisterNodeManagerRequest req =
+                Records.newRecord(RegisterNodeManagerRequest.class);
+        req.setNodeId(node.getNodeID());
+        req.setResource(node.getTotalCapability());
+        req.setHttpPort(80);
+        RegisterNodeManagerResponse response = rm.getResourceTrackerService()
+                .registerNodeManager(req);
+        masterKey = response.getNMTokenMasterKey();
+    }
+
+    public int getHeartBeatIntervalSecond()
+    {
+        int res = (int)(heartBeatInterval / 1000);
+        if (res == 0) res = 1;
+        return res;
+    }
+
+    public void run() {
+        try {
+            if (SimpleTimer.currentTimeMS() >= dispatchTime) {
+                if (!isRunning) {
+                    isRunning = true;
+                    firstStep();
+                } else {
+                    middleStep();
+                }
+            }
+        }
+        catch(Exception e )
+        {
+            LOG.error("NMSimpleSimulator error");
+            LOG.error(e.getMessage());
+        }
+    }
+
+    public void firstStep() {
+        // do nothing
+    }
+
+    public void middleStep() throws Exception {
+        // we check the lifetime for each running containers
+        ContainerSimpleSimulator cs = null;
+        for (Iterator<Map.Entry<ContainerId, ContainerSimpleSimulator>> it = runningContainers.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<ContainerId, ContainerSimpleSimulator> entry = it.next();
+            cs = entry.getValue();
+            if (cs.getEndTime() <= SimpleTimer.currentTimeMS()) {
+                completedContainerList.add(cs.getId());
+                runningContainers.remove(cs.getId());
+                LOG.debug(MessageFormat.format("Container {0} has completed",
+                        cs.getId()));
+            }
+        }
+
+        // send heart beat
+        NodeHeartbeatRequest beatRequest =
+                Records.newRecord(NodeHeartbeatRequest.class);
+        beatRequest.setLastKnownNMTokenMasterKey(masterKey);
+        NodeStatus ns = Records.newRecord(NodeStatus.class);
+
+        ns.setContainersStatuses(generateContainerStatusList());
+        ns.setNodeId(node.getNodeID());
+        ns.setKeepAliveApplications(new ArrayList<ApplicationId>());
+        ns.setResponseId(RESPONSE_ID ++);
+        ns.setNodeHealthStatus(NodeHealthStatus.newInstance(true, "", 0));
+        beatRequest.setNodeStatus(ns);
+        NodeHeartbeatResponse beatResponse =
+                rm.getResourceTrackerService().nodeHeartbeat(beatRequest);
+        if (! beatResponse.getContainersToCleanup().isEmpty()) {
+            // remove from queue
+            for (ContainerId containerId : beatResponse.getContainersToCleanup()){
+                if (amContainerList.contains(containerId)) {
+                    // AM container (not killed?, only release)
+
+                    amContainerList.remove(containerId);
+
+                    LOG.debug(MessageFormat.format("NodeManager {0} releases " +
+                            "an AM ({1}).", node.getNodeID(), containerId));
+                } else {
+                    cs = runningContainers.remove(containerId);
+                    releasedContainerList.add(containerId);
+                    LOG.debug(MessageFormat.format("NodeManager {0} releases a " +
+                            "container ({1}).", node.getNodeID(), containerId));
+                }
+            }
+        }
+        if (beatResponse.getNodeAction() == NodeAction.SHUTDOWN) {
+            lastStep();
+        }
+    }
+
+    public void lastStep() {
+        // do nothing
+    }
+
+    /**
+     * catch status of all containers located on current node
+     */
+    private ArrayList<ContainerStatus> generateContainerStatusList() {
+        ArrayList<ContainerStatus> csList = new ArrayList<ContainerStatus>();
+        // add running containers
+        for (ContainerSimpleSimulator container : runningContainers.values()) {
+            csList.add(newContainerStatus(container.getId(),
+                    ContainerState.RUNNING, ContainerExitStatus.SUCCESS));
+        }
+
+        for (ContainerId cId : amContainerList) {
+            csList.add(newContainerStatus(cId,
+                    ContainerState.RUNNING, ContainerExitStatus.SUCCESS));
+        }
+
+        // add complete containers
+
+        for (ContainerId cId : completedContainerList) {
+            LOG.debug(MessageFormat.format("NodeManager {0} completed" +
+                    " container ({1}).", node.getNodeID(), cId));
+            csList.add(newContainerStatus(
+                    cId, ContainerState.COMPLETE, ContainerExitStatus.SUCCESS));
+        }
+        completedContainerList.clear();
+
+        // released containers
+
+        for (ContainerId cId : releasedContainerList) {
+            LOG.debug(MessageFormat.format("NodeManager {0} released container" +
+                    " ({1}).", node.getNodeID(), cId));
+            csList.add(newContainerStatus(
+                    cId, ContainerState.COMPLETE, ContainerExitStatus.ABORTED));
+        }
+        releasedContainerList.clear();
+
+        return csList;
+    }
+
+    private ContainerStatus newContainerStatus(ContainerId cId,
+                                               ContainerState state,
+                                               int exitState) {
+        ContainerStatus cs = Records.newRecord(ContainerStatus.class);
+        cs.setContainerId(cId);
+        cs.setState(state);
+        cs.setExitStatus(exitState);
+        return cs;
+    }
+
+    public RMNode getNode() {
+        return node;
+    }
+
+    /**
+     * launch a new container with the given life time
+     */
+    public void addNewContainer(Container container, long lifeTimeMS, long currentTimeMS) {
+        LOG.debug(MessageFormat.format("NodeManager {0} launches a new " +
+                "container ({1}).", node.getNodeID(), container.getId()));
+        if (lifeTimeMS != -1) {
+            // normal container
+            // wencong: the lifeTimeMS can be max_long, which means the container reserve the resource
+            long theEndTime, theLifeTime;
+            if (lifeTimeMS == Long.MAX_VALUE){
+                theEndTime = Long.MAX_VALUE;
+            }
+            else {
+                theEndTime = lifeTimeMS + currentTimeMS;
+            }
+            theLifeTime = theEndTime - currentTimeMS;
+            assert (theLifeTime > 0);
+            ContainerSimpleSimulator cs = new ContainerSimpleSimulator(container.getId(),
+                    container.getResource(), theEndTime,
+                    theLifeTime);
+            runningContainers.put(cs.getId(), cs);
+        } else {
+            // AM container
+            // -1 means AMContainer
+
+            amContainerList.add(container.getId());
+
+        }
+    }
+
+    public void deleteContainer(Container container) {
+        // wencong:
+        // we can only delete the container with max_long as lifeTimeMS,
+        // which means the container is just used for reservation and never completed.
+        ContainerSimpleSimulator cont = runningContainers.get(container.getId());
+        runningContainers.remove(container.getId());
+    }
+
+    public void relaunchContainer(Container container, long lifeTimeMS, long currentTimeMS) {
+        // this function is for normal container, not AM container
+        assert(lifeTimeMS != -1);
+
+        LOG.debug(MessageFormat.format("[{2}] NodeManager {0} relaunches the " +
+                "container ({1}). liftTime: {3}", node.getNodeID(), container.getId(), currentTimeMS, lifeTimeMS));
+        deleteContainer(container);
+        ContainerSimpleSimulator cs = new ContainerSimpleSimulator(container.getId(),
+                container.getResource(), lifeTimeMS + currentTimeMS,
+                lifeTimeMS);
+        runningContainers.put(cs.getId(), cs);
+    }
+
+    /**
+     * clean up an AM container and add to completed list
+     * @param containerId id of the container to be cleaned
+     */
+    public void cleanupContainer(ContainerId containerId) {
+
+        amContainerList.remove(containerId);
+
+
+        completedContainerList.add(containerId);
+
+    }
+
+    @VisibleForTesting
+    Map<ContainerId, ContainerSimpleSimulator> getRunningContainers() {
+        return runningContainers;
+    }
+
+    @VisibleForTesting
+    List<ContainerId> getAMContainers() {
+        return amContainerList;
+    }
+
+    @VisibleForTesting
+    List<ContainerId> getCompletedContainers() {
+        return completedContainerList;
+    }
+}
