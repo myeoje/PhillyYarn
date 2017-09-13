@@ -52,8 +52,8 @@ public abstract class SchedulerNode {
 
   private static final Log LOG = LogFactory.getLog(SchedulerNode.class);
 
-  private Resource availableResource = Resource.newInstance(0, 0);
-  private Resource usedResource = Resource.newInstance(0, 0);
+  private Resource availableResource = Resource.newInstance(0, 0, 0, 0);
+  private Resource usedResource = Resource.newInstance(0, 0, 0, 0);
   private Resource totalResourceCapability;
   private RMContainer reservedContainer;
   private volatile int numContainers;
@@ -95,7 +95,7 @@ public abstract class SchedulerNode {
    */
   public synchronized void setTotalResource(Resource resource){
     this.totalResourceCapability = resource;
-    this.availableResource = Resources.subtract(totalResourceCapability,
+    this.availableResource = Resources.subtractWithGPUAttribute(totalResourceCapability,
       this.usedResource);
   }
   
@@ -226,8 +226,11 @@ public abstract class SchedulerNode {
           + rmNode.getNodeAddress());
       return;
     }
-    Resources.addTo(availableResource, resource);
-    Resources.subtractFrom(usedResource, resource);
+    Resources.subtractFromWithGPUAttribute(usedResource, resource);
+    Resources.addToWithGPUAttribute(availableResource, resource);
+
+    //assert Integer.bitCount(availableResource.getGPUAttribute()) == availableResource.getGPUs();
+    //assert Integer.bitCount(usedResource.getGPUAttribute()) == usedResource.getGPUs();
   }
 
   private synchronized void deductAvailableResource(Resource resource) {
@@ -236,8 +239,11 @@ public abstract class SchedulerNode {
           + rmNode.getNodeAddress());
       return;
     }
-    Resources.subtractFrom(availableResource, resource);
-    Resources.addTo(usedResource, resource);
+    Resources.addToWithGPUAttribute(usedResource, resource);
+    Resources.subtractFromWithGPUAttribute(availableResource, resource);
+
+    //assert Integer.bitCount(availableResource.getGPUAttribute()) == availableResource.getGPUs();
+    //assert Integer.bitCount(usedResource.getGPUAttribute()) == usedResource.getGPUs();
   }
 
   /**
@@ -285,6 +291,7 @@ public abstract class SchedulerNode {
       return;
     }
     allocateContainer(rmContainer);
+    // MJTHIS: TODO: may need to deal with recovery cases
   }
   
   public Set<String> getLabels() {
